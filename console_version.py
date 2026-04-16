@@ -1,7 +1,9 @@
+import os
 import minecraft_launcher_lib
 import subprocess
 
-minecraft_directory = minecraft_launcher_lib.utils.get_minecraft_directory().replace('minecraft', 'mjnlauncher')
+minecraft_directory = os.path.abspath(os.path.join(os.path.dirname(__file__), 'minecraft'))
+os.makedirs(minecraft_directory, exist_ok=True)
 
 version = input('Enter Minecraft version: ')
 username = input('Enter Username: ')
