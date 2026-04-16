@@ -11,7 +11,7 @@ from minecraft_launcher_lib.command import get_minecraft_command
 from random_username.generate import generate_username
 from uuid import uuid1
 
-import subprocess
+from subprocess import call
 from sys import argv, exit
 
 minecraft_directory = os.path.abspath(os.path.join(os.path.dirname(__file__), 'minecraft'))
@@ -58,29 +58,10 @@ class LaunchThread(QThread):
         options = {
             'username': self.username,
             'uuid': str(uuid1()),
-            'token': '',
-            'launcherName': 'unl1m1t3d',
-            'launcherVersion': '1.0',
-            'executablePath': 'javaw',
-            'defaultExecutablePath': 'javaw',
-            'disableMultiplayer': False
+            'token': ''
         }
 
-        command = get_minecraft_command(version=self.version_id, minecraft_directory=minecraft_directory, options=options)
-
-        # Force javaw when possible so no extra JVM console appears, and use the runtime's javaw if available.
-        if os.name == 'nt' and command:
-            javaw_path = None
-            binary = os.path.basename(command[0]).lower()
-            if binary == 'java.exe':
-                candidate = os.path.join(os.path.dirname(command[0]), 'javaw.exe')
-                if os.path.exists(candidate):
-                    javaw_path = candidate
-            if javaw_path:
-                command[0] = javaw_path
-
-        creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-        subprocess.Popen(command, cwd=minecraft_directory, creationflags=creationflags)
+        call(get_minecraft_command(version=self.version_id, minecraft_directory=minecraft_directory, options=options))
         self.state_update_signal.emit(False)
 
 class MainWindow(QMainWindow):
