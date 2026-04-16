@@ -1,8 +1,9 @@
+import os
+
 from PyQt5.QtCore import QThread, pyqtSignal, QSize, Qt
 from PyQt5.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit, QComboBox, QSpacerItem, QSizePolicy, QProgressBar, QPushButton, QApplication, QMainWindow
 from PyQt5.QtGui import QPixmap
 
-from minecraft_launcher_lib.utils import get_minecraft_directory, get_version_list
 from minecraft_launcher_lib.install import install_minecraft_version
 from minecraft_launcher_lib.command import get_minecraft_command
 
@@ -13,7 +14,8 @@ from uuid import uuid1
 from subprocess import call
 from sys import argv, exit
 
-minecraft_directory = get_minecraft_directory().replace('minecraft', 'mjnlauncher')
+minecraft_directory = os.path.abspath(os.path.join(os.path.dirname(__file__), 'minecraft'))
+os.makedirs(minecraft_directory, exist_ok=True)
 
 class LaunchThread(QThread):
     launch_setup_signal = pyqtSignal(str, str)
@@ -48,7 +50,7 @@ class LaunchThread(QThread):
     def run(self):
         self.state_update_signal.emit(True)
 
-        install_minecraft_version(versionid=self.version_id, minecraft_directory=minecraft_directory, callback={ 'setStatus': self.update_progress_label, 'setProgress': self.update_progress, 'setMax': self.update_progress_max })
+        install_minecraft_version(version=self.version_id, minecraft_directory=minecraft_directory, callback={ 'setStatus': self.update_progress_label, 'setProgress': self.update_progress, 'setMax': self.update_progress_max })
 
         if self.username == '':
             self.username = generate_username()[0]
@@ -67,6 +69,7 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         self.resize(300, 283)
+        self.setWindowTitle('Minecraft Launcher')
         self.centralwidget = QWidget(self)
         
         self.logo = QLabel(self.centralwidget)
@@ -81,8 +84,8 @@ class MainWindow(QMainWindow):
         self.username.setPlaceholderText('Username')
         
         self.version_select = QComboBox(self.centralwidget)
-        for version in get_version_list():
-            self.version_select.addItem(version['id'])
+        for version in ['1.16.5', '1.21.4']:
+            self.version_select.addItem(version)
         
         self.progress_spacer = QSpacerItem(20, 20, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         
