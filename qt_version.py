@@ -11,7 +11,7 @@ from minecraft_launcher_lib.command import get_minecraft_command
 from random_username.generate import generate_username
 from uuid import uuid1
 
-from subprocess import call
+import subprocess
 from sys import argv, exit
 
 minecraft_directory = os.path.abspath(os.path.join(os.path.dirname(__file__), 'minecraft'))
@@ -55,13 +55,45 @@ class LaunchThread(QThread):
         if self.username == '':
             self.username = generate_username()[0]
         
+        # Determine Java runtime path based on version
+        java_runtime_path = None
+        if self.version_id.startswith('1.21'):
+            # Use java-runtime-delta for modern versions
+            java_runtime_path = os.path.join(minecraft_directory, 'runtime', 'java-runtime-delta', 'bin', 'javaw.exe')
+        else:
+            # Use jre-legacy for older versions like 1.16.5
+            java_runtime_path = os.path.join(minecraft_directory, 'runtime', 'jre-legacy', 'bin', 'javaw.exe')
+        
+        # Fall back to default if runtime not found
+        if not os.path.exists(java_runtime_path):
+            java_runtime_path = 'javaw' 
+        
         options = {
             'username': self.username,
             'uuid': str(uuid1()),
-            'token': ''
+            'token': '',
+            'launcherName': 'unl1m1t3d',
+            'launcherVersion': '1.0',
+            'executablePath': java_runtime_path,
+            'defaultExecutablePath': java_runtime_path,
+            'disableMultiplayer': False
         }
 
-        call(get_minecraft_command(version=self.version_id, minecraft_directory=minecraft_directory, options=options))
+        command = get_minecraft_command(version=self.version_id, minecraft_directory=minecraft_directory, options=options)
+
+        # Force javaw when possible so no extra JVM console appears, and use the runtime's javaw if available.
+        if os.name == 'nt' and command:
+            javaw_path = None
+            binary = os.path.basename(command[0]).lower()
+            if binary == 'java.exe':
+                candidate = os.path.join(os.path.dirname(command[0]), 'javaw.exe')
+                if os.path.exists(candidate):
+                    javaw_path = candidate
+            if javaw_path:
+                command[0] = javaw_path
+
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        subprocess.Popen(command, cwd=minecraft_directory, creationflags=creationflags)
         self.state_update_signal.emit(False)
 
 class MainWindow(QMainWindow):
@@ -84,7 +116,7 @@ class MainWindow(QMainWindow):
         self.username.setPlaceholderText('Username')
         
         self.version_select = QComboBox(self.centralwidget)
-        for version in ['1.16.5', '1.21.4']:
+        for version in ['1.21.4']:
             self.version_select.addItem(version)
         
         self.progress_spacer = QSpacerItem(20, 20, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
@@ -141,3 +173,4 @@ if __name__ == '__main__':
     window.show()
 
     exit(app.exec_())
+#DESKTOP-SO5QVIC
