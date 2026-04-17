@@ -13,6 +13,7 @@ from uuid import uuid1
 
 import subprocess
 from sys import argv, exit
+import shutil
 
 minecraft_directory = os.path.abspath(os.path.join(os.path.dirname(__file__), 'minecraft'))
 os.makedirs(minecraft_directory, exist_ok=True)
@@ -51,6 +52,19 @@ class LaunchThread(QThread):
         self.state_update_signal.emit(True)
 
         install_minecraft_version(version=self.version_id, minecraft_directory=minecraft_directory, callback={ 'setStatus': self.update_progress_label, 'setProgress': self.update_progress, 'setMax': self.update_progress_max })
+
+        # Check and install mod for 1.21.4
+        if self.version_id == '1.21.4':
+            mods_dir = os.path.join(minecraft_directory, 'mods')
+            os.makedirs(mods_dir, exist_ok=True)
+            mod_jar_src = os.path.join(os.path.dirname(__file__), 'mod_1_21_4', 'build', 'libs', 'mod_1_21_4-1.0.0.jar')
+            mod_jar_dst = os.path.join(mods_dir, 'mod_1_21_4-1.0.0.jar')
+            if not os.path.exists(mod_jar_dst):
+                if os.path.exists(mod_jar_src):
+                    shutil.copy2(mod_jar_src, mod_jar_dst)
+                    self.update_progress_label('Mod installed')
+                else:
+                    self.update_progress_label('Mod JAR not found, build the mod first')
 
         if self.username == '':
             self.username = generate_username()[0]
@@ -173,4 +187,3 @@ if __name__ == '__main__':
     window.show()
 
     exit(app.exec_())
-#DESKTOP-SO5QVIC
