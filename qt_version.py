@@ -5,12 +5,14 @@ from PyQt5.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit
 from PyQt5.QtGui import QPixmap
 
 from minecraft_launcher_lib.install import install_minecraft_version
+from minecraft_launcher_lib.fabric import install_fabric
 from minecraft_launcher_lib.command import get_minecraft_command
 
 # Эти импорты не обязательны, вместо generate_username()[0] и str(uuid1()) можно оставить просто ''
 from random_username.generate import generate_username
 from uuid import uuid1
 
+import re
 import subprocess
 from sys import argv, exit
 import shutil
@@ -48,55 +50,68 @@ class LaunchThread(QThread):
         self.progress_max = value
         self.progress_update_signal.emit(self.progress, self.progress_max, self.progress_label)
 
-import os
+    def get_java_version(self, java_exe):
+        try:
+            result = subprocess.run([java_exe, '-version'], capture_output=True, text=True, timeout=5)
+        except Exception:
+            return None
 
-from PyQt5.QtCore import QThread, pyqtSignal, QSize, Qt
-from PyQt5.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit, QComboBox, QSpacerItem, QSizePolicy, QProgressBar, QPushButton, QApplication, QMainWindow
-from PyQt5.QtGui import QPixmap
+        output = (result.stdout or '') + '\n' + (result.stderr or '')
+        match = re.search(r'version \"([0-9._]+)\"', output)
+        if not match:
+            return None
 
-from minecraft_launcher_lib.install import install_minecraft_version
-from minecraft_launcher_lib.command import get_minecraft_command
+        version_text = match.group(1)
+        if version_text.startswith('1.'):
+            parts = version_text.split('.')
+            if len(parts) >= 2 and parts[1].isdigit():
+                return int(parts[1])
+            return None
 
-# Эти импорты не обязательны, вместо generate_username()[0] и str(uuid1()) можно оставить просто ''
-from random_username.generate import generate_username
-from uuid import uuid1
+        major = version_text.split('.')[0]
+        return int(major) if major.isdigit() else None
 
-import subprocess
-from sys import argv, exit
-import shutil
+    def find_java_executable(self):
+        candidates = []
+        for name in ['javaw', 'java']:
+            path = shutil.which(name)
+            if path:
+                candidates.append(path)
 
-minecraft_directory = os.path.abspath(os.path.join(os.path.dirname(__file__), 'minecraft'))
-os.makedirs(minecraft_directory, exist_ok=True)
+        java_home = os.environ.get('JAVA_HOME')
+        if java_home:
+            for candidate in ['javaw.exe', 'java.exe']:
+                candidate_path = os.path.join(java_home, 'bin', candidate)
+                if os.path.exists(candidate_path):
+                    candidates.append(candidate_path)
 
-class LaunchThread(QThread):
-    launch_setup_signal = pyqtSignal(str, str)
-    progress_update_signal = pyqtSignal(int, int, str)
-    state_update_signal = pyqtSignal(bool)
+        program_files = os.environ.get('ProgramFiles', r'C:\Program Files')
+        program_files_x86 = os.environ.get('ProgramFiles(x86)', r'C:\Program Files (x86)')
+        for base in [program_files, program_files_x86]:
+            java_root = os.path.join(base, 'Java')
+            if os.path.isdir(java_root):
+                for child in sorted(os.listdir(java_root), reverse=True):
+                    for candidate in ['javaw.exe', 'java.exe']:
+                        candidate_path = os.path.join(java_root, child, 'bin', candidate)
+                        if os.path.exists(candidate_path):
+                            candidates.append(candidate_path)
 
-    version_id = ''
-    username = ''
+        unique_candidates = []
+        for path in candidates:
+            if path not in unique_candidates:
+                unique_candidates.append(path)
 
-    progress = 0
-    progress_max = 0
-    progress_label = ''
+        best_path = None
+        best_version = -1
+        for path in unique_candidates:
+            version = self.get_java_version(path)
+            if version is None:
+                continue
+            if version > best_version:
+                best_version = version
+                best_path = path
 
-    def __init__(self):
-        super().__init__()
-        self.launch_setup_signal.connect(self.launch_setup)
-
-    def launch_setup(self, version_id, username):
-        self.version_id = version_id
-        self.username = username
-    
-    def update_progress_label(self, value):
-        self.progress_label = value
-        self.progress_update_signal.emit(self.progress, self.progress_max, self.progress_label)
-    def update_progress(self, value):
-        self.progress = value
-        self.progress_update_signal.emit(self.progress, self.progress_max, self.progress_label)
-    def update_progress_max(self, value):
-        self.progress_max = value
-        self.progress_update_signal.emit(self.progress, self.progress_max, self.progress_label)
+        return best_path
 
     def run(self):
         self.state_update_signal.emit(True)
@@ -124,14 +139,23 @@ class LaunchThread(QThread):
             fabric_version = 'fabric-loader-0.19.2-1.21.4'
             self.update_progress_label('Installing Fabric version...')
             
-            # Try to install the Fabric version if it doesn't exist
+            java_exe = self.find_java_executable()
+            if java_exe is None:
+                self.update_progress_label('Java not found. Install Java and add it to PATH or set JAVA_HOME.')
+                self.state_update_signal.emit(False)
+                return
+
+            java_version = self.get_java_version(java_exe)
+            if java_version is None or java_version < 17:
+                self.update_progress_label('Java ' + (str(java_version) if java_version else 'unknown') + ' is too old. Install Java 17 or newer.')
+                self.state_update_signal.emit(False)
+                return
+
             try:
-                install_minecraft_version(version=fabric_version, minecraft_directory=minecraft_directory, callback={ 'setStatus': self.update_progress_label, 'setProgress': self.update_progress, 'setMax': self.update_progress_max })
-            except:
-                # If Fabric version install fails, install vanilla first
+                install_fabric(minecraft_version=self.version_id, minecraft_directory=minecraft_directory, loader_version='0.19.2', callback={ 'setStatus': self.update_progress_label, 'setProgress': self.update_progress, 'setMax': self.update_progress_max }, java=java_exe)
+            except Exception:
                 install_minecraft_version(version=self.version_id, minecraft_directory=minecraft_directory, callback={ 'setStatus': self.update_progress_label, 'setProgress': self.update_progress, 'setMax': self.update_progress_max })
-                self.update_progress_label('Fabric version not available, using vanilla with manual Fabric launch')
-                # Fall back to manual Fabric launch
+                self.update_progress_label('Fabric install failed, using manual Fabric launch fallback')
                 self.launch_fabric_manually()
                 return
             
@@ -152,6 +176,17 @@ class LaunchThread(QThread):
             
             self.update_progress_label('Launching with Fabric...')
             
+            java_exec = self.find_java_executable()
+            if java_exec is None:
+                self.update_progress_label('Java not found. Install Java and add it to PATH or set JAVA_HOME.')
+                self.state_update_signal.emit(False)
+                return
+            java_version = self.get_java_version(java_exec)
+            if java_version is None or java_version < 17:
+                self.update_progress_label('Java ' + (str(java_version) if java_version else 'unknown') + ' is too old. Install Java 17 or newer.')
+                self.state_update_signal.emit(False)
+                return
+
             # Use the Fabric version command
             options = {
                 'username': self.username,
@@ -159,8 +194,8 @@ class LaunchThread(QThread):
                 'token': '',
                 'launcherName': 'unl1m1t3d',
                 'launcherVersion': '1.0',
-                'executablePath': 'javaw',
-                'defaultExecutablePath': 'javaw',
+                'executablePath': java_exec,
+                'defaultExecutablePath': java_exec,
                 'disableMultiplayer': False
             }
 
@@ -178,7 +213,12 @@ class LaunchThread(QThread):
                     command[0] = javaw_path
 
             creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-            subprocess.Popen(command, cwd=minecraft_directory, creationflags=creationflags)
+            try:
+                subprocess.Popen(command, cwd=minecraft_directory, creationflags=creationflags)
+            except FileNotFoundError as e:
+                self.update_progress_label(f'Launch failed: {e}')
+                self.state_update_signal.emit(False)
+                return
         else:
             # For other versions, use standard launcher
             # Determine Java runtime path based on version
@@ -192,7 +232,11 @@ class LaunchThread(QThread):
             
             # Fall back to default if runtime not found
             if not os.path.exists(java_runtime_path):
-                java_runtime_path = 'javaw' 
+                java_runtime_path = self.find_java_executable()
+                if java_runtime_path is None:
+                    self.update_progress_label('Java executable not found. Install Java or set JAVA_HOME.')
+                    self.state_update_signal.emit(False)
+                    return
             
             options = {
                 'username': self.username,
@@ -234,14 +278,18 @@ class LaunchThread(QThread):
         os.environ['APPDATA'] = minecraft_directory
         
         # Find Java executable
-        java_exe = 'java'  # Use system Java
-        
+        java_exe = self.find_java_executable()
+        if java_exe is None:
+            self.update_progress_label('Java executable not found. Install Java and add it to PATH or set JAVA_HOME.')
+            self.state_update_signal.emit(False)
+            return
+
         # Build classpath like fabric_start.bat
         libraries_path = os.path.join(minecraft_directory, 'libraries')
         version_jar = os.path.join(minecraft_directory, 'versions', self.version_id, f'{self.version_id}.jar')
         fabric_loader_jar = os.path.join(libraries_path, 'net', 'fabricmc', 'fabric-loader', '0.19.2', 'fabric-loader-0.19.2.jar')
         
-        classpath = f'"{libraries_path}/*;{version_jar};{fabric_loader_jar}"'
+        classpath = os.pathsep.join([os.path.join(libraries_path, '*'), version_jar, fabric_loader_jar])
         
         # Fabric launch command
         command = [
@@ -268,7 +316,10 @@ class LaunchThread(QThread):
         ]
         
         creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-        subprocess.Popen(command, cwd=minecraft_directory, creationflags=creationflags)
+        try:
+            subprocess.Popen(command, cwd=minecraft_directory, creationflags=creationflags)
+        except FileNotFoundError:
+            self.update_progress_label(f'Cannot launch Fabric: Java executable not found ({java_exe})')
         self.state_update_signal.emit(False)
 
 class MainWindow(QMainWindow):
@@ -296,7 +347,7 @@ class MainWindow(QMainWindow):
         self.username.setPlaceholderText('Username')
         
         self.version_select = QComboBox(self.centralwidget)
-        self.version_select.addItem('1.21.4 (з модом Fabric)')
+        self.version_select.addItem('1.21.4', '1.21.4')
         
         self.progress_spacer = QSpacerItem(20, 20, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         
@@ -341,7 +392,8 @@ class MainWindow(QMainWindow):
         self.start_progress.setMaximum(max_progress)
         self.start_progress_label.setText(label) # Исправил проблему с созданием описания для полосы прогресса [24:01]
     def launch_game(self):
-        self.launch_thread.launch_setup_signal.emit(self.version_select.currentText(), self.username.text())
+        version_id = self.version_select.currentData() or self.version_select.currentText()
+        self.launch_thread.launch_setup_signal.emit(version_id, self.username.text())
         self.launch_thread.start()
 
 if __name__ == '__main__':
