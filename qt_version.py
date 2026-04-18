@@ -327,7 +327,7 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         self.resize(350, 283)
-        self.setWindowTitle('Unl1m1t3d Launcher (оффлайн з модом)')
+        self.setWindowTitle('Unl1m1t3d Launcher')
         self.centralwidget = QWidget(self)
         
         self.logo = QLabel(self.centralwidget)

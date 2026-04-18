@@ -2,5 +2,4 @@ minecraft/
 logs/
 .gradle/
 **/build/
-__pycache__/
-__pycache__/qt_version.cpython-314.pyc
+/__pycache__
