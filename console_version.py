@@ -4,7 +4,7 @@ import subprocess
 
 
 def show_menu() -> str:
-    print('=== Minecraft Launcher Menu ===')
+    print('=== Unl1m1t3d Launcher Menu ===')
     print('1. Install and launch Minecraft')
     print('2. Exit')
     return input('Choose an option: ').strip()
