@@ -12,6 +12,7 @@ import org.lwjgl.glfw.GLFW;
 
 public class Mod_1_21_4Client implements ClientModInitializer {
     private static KeyBinding keyBinding;
+    private static boolean lastKeyState = false;
 
     @Override
     public void onInitializeClient() {
@@ -25,9 +26,14 @@ public class Mod_1_21_4Client implements ClientModInitializer {
 
         // Register the event to check for key presses
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            while (keyBinding.wasPressed()) {
-                // Open the menu
-                openMenu(client);
+            if (client != null && client.currentScreen == null) {
+                boolean currentKeyState = keyBinding.isPressed();
+                if (currentKeyState && !lastKeyState) {
+                    openMenu(client);
+                }
+                lastKeyState = currentKeyState;
+            } else {
+                lastKeyState = false;
             }
         });
     }

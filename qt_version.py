@@ -16,6 +16,7 @@ import re
 import subprocess
 from sys import argv, exit
 import shutil
+import urllib.request
 
 minecraft_directory = os.path.abspath(os.path.join(os.path.dirname(__file__), 'minecraft'))
 os.makedirs(minecraft_directory, exist_ok=True)
@@ -124,12 +125,13 @@ class LaunchThread(QThread):
             os.makedirs(mods_dir, exist_ok=True)
             mod_jar_src = os.path.join(os.path.dirname(__file__), 'mod_1_21_4', 'build', 'libs', 'mod_1_21_4-1.0.0.jar')
             mod_jar_dst = os.path.join(mods_dir, 'mod_1_21_4-1.0.0.jar')
-            if not os.path.exists(mod_jar_dst):
-                if os.path.exists(mod_jar_src):
-                    shutil.copy2(mod_jar_src, mod_jar_dst)
-                    self.update_progress_label('Mod installed')
-                else:
-                    self.update_progress_label('Mod JAR not found, build the mod first')
+            if os.path.exists(mod_jar_src):
+                if os.path.exists(mod_jar_dst):
+                    os.remove(mod_jar_dst)
+                shutil.copy2(mod_jar_src, mod_jar_dst)
+                self.update_progress_label('Mod installed')
+            else:
+                self.update_progress_label('Mod JAR not found, build the mod first')
 
         if self.username == '':
             self.username = generate_username()[0]
@@ -159,17 +161,28 @@ class LaunchThread(QThread):
                 self.launch_fabric_manually()
                 return
             
-            # Check and install mod for 1.21.4
+            # Check and install mod for 1.21.4 - always copy to ensure latest version
             mods_dir = os.path.join(minecraft_directory, 'mods')
             os.makedirs(mods_dir, exist_ok=True)
             mod_jar_src = os.path.join(os.path.dirname(__file__), 'mod_1_21_4', 'build', 'libs', 'mod_1_21_4-1.0.0.jar')
             mod_jar_dst = os.path.join(mods_dir, 'mod_1_21_4-1.0.0.jar')
-            if not os.path.exists(mod_jar_dst):
-                if os.path.exists(mod_jar_src):
-                    shutil.copy2(mod_jar_src, mod_jar_dst)
-                    self.update_progress_label('Mod installed')
-                else:
-                    self.update_progress_label('Mod JAR not found, build the mod first')
+            if os.path.exists(mod_jar_src):
+                if os.path.exists(mod_jar_dst):
+                    os.remove(mod_jar_dst)
+                shutil.copy2(mod_jar_src, mod_jar_dst)
+                self.update_progress_label('Mod installed')
+            else:
+                self.update_progress_label('Mod JAR not found, build the mod first')
+
+            # Download and install Fabric API if not present
+            fabric_api_url = 'https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/0.115.1+1.21.4/fabric-api-0.115.1+1.21.4.jar'
+            fabric_api_dst = os.path.join(mods_dir, 'fabric-api-0.115.1+1.21.4.jar')
+            if not os.path.exists(fabric_api_dst):
+                try:
+                    urllib.request.urlretrieve(fabric_api_url, fabric_api_dst)
+                    self.update_progress_label('Fabric API installed')
+                except Exception as e:
+                    self.update_progress_label(f'Failed to download Fabric API: {e}')
 
             if self.username == '':
                 self.username = generate_username()[0]

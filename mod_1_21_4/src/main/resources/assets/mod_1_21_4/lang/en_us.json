@@ -1,4 +1,8 @@
 {
   "key.mod_1_21_4.open_menu": "Open Mod Menu",
-  "category.mod_1_21_4": "Mod 1.21.4"
+  "category.mod_1_21_4": "Mod 1.21.4",
+  "button.mod_1_21_4.function": "Function",
+  "button.mod_1_21_4.bind": "Bind",
+  "button.mod_1_21_4.settings": "Settings & About Us",
+  "button.mod_1_21_4.close": "Close"
 }

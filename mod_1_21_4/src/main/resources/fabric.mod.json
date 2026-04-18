@@ -22,9 +22,6 @@
 			"com.example.mod_1_21_4.Mod_1_21_4Client"
 		]
 	},
-	"mixins": [
-		"mod_1_21_4.mixins.json"
-	],
 	"depends": {
 		"fabricloader": ">=0.16.7",
 		"minecraft": "~1.21.4",

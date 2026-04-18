@@ -1,0 +1,25 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "build mod",
+			"type": "shell",
+			"command": "gradlew.bat"
+		},
+		{
+			"label": "build mod",
+			"type": "shell",
+			"command": "gradlew.bat"
+		},
+		{
+			"label": "build mod",
+			"type": "shell",
+			"command": ".\\gradlew.bat"
+		},
+		{
+			"label": "build mod",
+			"type": "shell",
+			"command": ".\\gradlew.bat"
+		}
+	]
+}

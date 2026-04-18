@@ -1,0 +1,25 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build mod",
+            "type": "shell",
+            "command": ".\\gradlew.bat",
+            "args": ["build"],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "options": {
+                "cwd": "${workspaceFolder}/mod_1_21_4",
+                "env": {
+                    "JAVA_HOME": "C:\\Program Files\\Java\\jdk-21.0.10",
+                    "PATH": "${env:PATH};C:\\Program Files\\Java\\jdk-21.0.10\\bin"
+                }
+            }
+        }
+    ]
+}
