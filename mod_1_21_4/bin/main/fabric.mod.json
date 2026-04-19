@@ -1,0 +1,34 @@
+{
+	"schemaVersion": 1,
+	"id": "mod_1_21_4",
+	"version": "${version}",
+	"name": "Mod 1.21.4",
+	"description": "A mod that opens a menu on right shift",
+	"authors": [
+		"Example"
+	],
+	"contact": {
+		"homepage": "https://fabricmc.net/",
+		"sources": "https://github.com/FabricMC/fabric-example-mod"
+	},
+	"license": "CC0-1.0",
+	"icon": "assets/mod_1_21_4/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"com.example.mod_1_21_4.Mod_1_21_4"
+		],
+		"client": [
+			"com.example.mod_1_21_4.Mod_1_21_4Client"
+		]
+	},
+	"depends": {
+		"fabricloader": ">=0.16.7",
+		"minecraft": "~1.21.4",
+		"java": ">=21",
+		"fabric-api": "*"
+	},
+	"suggests": {
+		"another-mod": "*"
+	}
+}
