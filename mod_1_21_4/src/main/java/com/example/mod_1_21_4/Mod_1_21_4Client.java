@@ -14,6 +14,30 @@ public class Mod_1_21_4Client implements ClientModInitializer {
     private static KeyBinding keyBinding;
     private static boolean lastKeyState = false;
 
+    static boolean autoWardenEnabled;
+    static boolean ancientBotEnabled;
+    static boolean autoPotionEnabled;
+    static boolean chorusAutoFarmEnabled;
+    static boolean autoEatEnabled;
+    static boolean autoInvisEnabled;
+    static boolean autoSellEnabled;
+
+    static int keyAutoWarden = GLFW.GLFW_KEY_UNKNOWN;
+    static int keyAncientBot = GLFW.GLFW_KEY_UNKNOWN;
+    static int keyAutoPotion = GLFW.GLFW_KEY_UNKNOWN;
+    static int keyChorusAutoFarm = GLFW.GLFW_KEY_UNKNOWN;
+    static int keyAutoEat = GLFW.GLFW_KEY_UNKNOWN;
+    static int keyAutoInvis = GLFW.GLFW_KEY_UNKNOWN;
+    static int keyAutoSell = GLFW.GLFW_KEY_UNKNOWN;
+
+    private static boolean lastAutoWardenKeyState = false;
+    private static boolean lastAncientBotKeyState = false;
+    private static boolean lastAutoPotionKeyState = false;
+    private static boolean lastChorusAutoFarmKeyState = false;
+    private static boolean lastAutoEatKeyState = false;
+    private static boolean lastAutoInvisKeyState = false;
+    private static boolean lastAutoSellKeyState = false;
+
     @Override
     public void onInitializeClient() {
         // Register the key binding
@@ -36,11 +60,71 @@ public class Mod_1_21_4Client implements ClientModInitializer {
                 lastKeyState = false;
             }
         });
+
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            if (client != null) {
+                checkFunctionBinds(client);
+            }
+        });
     }
 
     private void openMenu(MinecraftClient client) {
         // Create a simple screen with a menu
         Screen menuScreen = new MenuScreen(Text.literal("Mod Menu"));
         client.setScreen(menuScreen);
+    }
+
+    private void checkFunctionBinds(MinecraftClient client) {
+        long window = client.getWindow().getHandle();
+
+        lastAutoWardenKeyState = tickBind(window, keyAutoWarden, lastAutoWardenKeyState, () -> autoWardenEnabled = !autoWardenEnabled);
+        lastAncientBotKeyState = tickBind(window, keyAncientBot, lastAncientBotKeyState, () -> ancientBotEnabled = !ancientBotEnabled);
+        lastAutoPotionKeyState = tickBind(window, keyAutoPotion, lastAutoPotionKeyState, () -> autoPotionEnabled = !autoPotionEnabled);
+        lastChorusAutoFarmKeyState = tickBind(window, keyChorusAutoFarm, lastChorusAutoFarmKeyState, () -> chorusAutoFarmEnabled = !chorusAutoFarmEnabled);
+        lastAutoEatKeyState = tickBind(window, keyAutoEat, lastAutoEatKeyState, () -> autoEatEnabled = !autoEatEnabled);
+        lastAutoInvisKeyState = tickBind(window, keyAutoInvis, lastAutoInvisKeyState, () -> autoInvisEnabled = !autoInvisEnabled);
+        lastAutoSellKeyState = tickBind(window, keyAutoSell, lastAutoSellKeyState, () -> autoSellEnabled = !autoSellEnabled);
+    }
+
+    private boolean tickBind(long window, int keyCode, boolean lastState, Runnable action) {
+        if (keyCode == GLFW.GLFW_KEY_UNKNOWN) {
+            return false;
+        }
+        boolean currentState = InputUtil.isKeyPressed(window, keyCode);
+        if (currentState && !lastState) {
+            action.run();
+        }
+        return currentState;
+    }
+
+    public static void setBindKey(String functionName, int keyCode) {
+        switch (functionName) {
+            case "auto warden" -> keyAutoWarden = keyCode;
+            case "ancient bot" -> keyAncientBot = keyCode;
+            case "auto potion" -> keyAutoPotion = keyCode;
+            case "chorus auto farm" -> keyChorusAutoFarm = keyCode;
+            case "auto eat" -> keyAutoEat = keyCode;
+            case "auto invis" -> keyAutoInvis = keyCode;
+            case "auto sell" -> keyAutoSell = keyCode;
+        }
+    }
+
+    public static String getBindKeyName(String functionName) {
+        int keyCode;
+        switch (functionName) {
+            case "auto warden" -> keyCode = keyAutoWarden;
+            case "ancient bot" -> keyCode = keyAncientBot;
+            case "auto potion" -> keyCode = keyAutoPotion;
+            case "chorus auto farm" -> keyCode = keyChorusAutoFarm;
+            case "auto eat" -> keyCode = keyAutoEat;
+            case "auto invis" -> keyCode = keyAutoInvis;
+            case "auto sell" -> keyCode = keyAutoSell;
+            default -> keyCode = GLFW.GLFW_KEY_UNKNOWN;
+        }
+        if (keyCode == GLFW.GLFW_KEY_UNKNOWN) {
+            return "Not set";
+        }
+        String name = GLFW.glfwGetKeyName(keyCode, 0);
+        return name != null ? name.toUpperCase() : "KEY_" + keyCode;
     }
 }
