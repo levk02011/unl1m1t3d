@@ -1,7 +1,7 @@
 import os
 
 from PyQt5.QtCore import QThread, pyqtSignal, QSize, Qt
-from PyQt5.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit, QComboBox, QSpacerItem, QSizePolicy, QProgressBar, QPushButton, QApplication, QMainWindow
+from PyQt5.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit, QComboBox, QSpacerItem, QSizePolicy, QProgressBar, QPushButton, QApplication, QMainWindow, QMenuBar, QMenu, QAction, QMessageBox
 from PyQt5.QtGui import QPixmap
 
 from minecraft_launcher_lib.install import install_minecraft_version
@@ -339,6 +339,13 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
+        # Create menu bar
+        self.menubar = self.menuBar()
+        self.about_menu = self.menubar.addMenu('About')
+        self.about_us_action = QAction('About Us', self)
+        self.about_us_action.triggered.connect(self.show_about_us)
+        self.about_menu.addAction(self.about_us_action)
+
         self.resize(350, 283)
         self.setWindowTitle('Unl1m1t3d Launcher')
         self.centralwidget = QWidget(self)
@@ -408,6 +415,23 @@ class MainWindow(QMainWindow):
         version_id = self.version_select.currentData() or self.version_select.currentText()
         self.launch_thread.launch_setup_signal.emit(version_id, self.username.text())
         self.launch_thread.start()
+
+    def show_about_us(self):
+        about_text = """
+        <h2>Unl1m1t3d Launcher</h2>
+        <p><b>Version:</b> 1.0</p>
+        <p>A custom Minecraft launcher with Fabric mod support.</p>
+        <p><b>Features:</b></p>
+        <ul>
+            <li>Easy Minecraft installation and launching</li>
+            <li>Fabric mod loader support</li>
+            <li>Automatic mod installation</li>
+            <li>Progress tracking during installation</li>
+        </ul>
+        <p><b>Developed by:</b> Unl1m1t3d Team</p>
+        <p>For more information, visit our website or check the project repository.</p>
+        """
+        QMessageBox.about(self, "About Unl1m1t3d Launcher", about_text)
 
 if __name__ == '__main__':
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling, True)
