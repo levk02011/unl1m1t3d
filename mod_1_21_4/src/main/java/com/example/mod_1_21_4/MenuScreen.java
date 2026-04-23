@@ -35,7 +35,7 @@ public class MenuScreen extends Screen {
         int columnSpacing = 10;
 
         int sectionsColumnX = sidebarX + 10;
-        int pveColumnX = sectionsColumnX + sectionWidth + columnSpacing;
+        int pveColumnX = SIDEBAR_WIDTH + 15;
         int extraColumnX = pveColumnX + buttonWidth + columnSpacing;
 
         this.addDrawableChild(ButtonWidget.builder(Text.literal("function"), button -> {
@@ -56,37 +56,37 @@ public class MenuScreen extends Screen {
         if (selectedSection == 0) {
             this.addDrawableChild(ButtonWidget.builder(Text.literal(toggleLabel("auto warden", Mod_1_21_4Client.autoWardenEnabled)), button -> {
                 Mod_1_21_4Client.autoWardenEnabled = !Mod_1_21_4Client.autoWardenEnabled;
-                button.setMessage(Text.literal(toggleLabel("auto warden", Mod_1_21_4Client.autoWardenEnabled)));
+                init();
             }).dimensions(pveColumnX, startY, buttonWidth, buttonHeight).build());
 
             this.addDrawableChild(ButtonWidget.builder(Text.literal(toggleLabel("ancient bot", Mod_1_21_4Client.ancientBotEnabled)), button -> {
                 Mod_1_21_4Client.ancientBotEnabled = !Mod_1_21_4Client.ancientBotEnabled;
-                button.setMessage(Text.literal(toggleLabel("ancient bot", Mod_1_21_4Client.ancientBotEnabled)));
+                init();
             }).dimensions(pveColumnX, startY + (buttonHeight + spacing) * 1, buttonWidth, buttonHeight).build());
 
             this.addDrawableChild(ButtonWidget.builder(Text.literal(toggleLabel("auto potion", Mod_1_21_4Client.autoPotionEnabled)), button -> {
                 Mod_1_21_4Client.autoPotionEnabled = !Mod_1_21_4Client.autoPotionEnabled;
-                button.setMessage(Text.literal(toggleLabel("auto potion", Mod_1_21_4Client.autoPotionEnabled)));
+                init();
             }).dimensions(pveColumnX, startY + (buttonHeight + spacing) * 2, buttonWidth, buttonHeight).build());
 
             this.addDrawableChild(ButtonWidget.builder(Text.literal(toggleLabel("chorus auto farm", Mod_1_21_4Client.chorusAutoFarmEnabled)), button -> {
                 Mod_1_21_4Client.chorusAutoFarmEnabled = !Mod_1_21_4Client.chorusAutoFarmEnabled;
-                button.setMessage(Text.literal(toggleLabel("chorus auto farm", Mod_1_21_4Client.chorusAutoFarmEnabled)));
+                init();
             }).dimensions(pveColumnX, startY + (buttonHeight + spacing) * 3, buttonWidth, buttonHeight).build());
 
             this.addDrawableChild(ButtonWidget.builder(Text.literal(toggleLabel("auto eat", Mod_1_21_4Client.autoEatEnabled)), button -> {
                 Mod_1_21_4Client.autoEatEnabled = !Mod_1_21_4Client.autoEatEnabled;
-                button.setMessage(Text.literal(toggleLabel("auto eat", Mod_1_21_4Client.autoEatEnabled)));
+                init();
             }).dimensions(extraColumnX, startY, buttonWidth, buttonHeight).build());
 
             this.addDrawableChild(ButtonWidget.builder(Text.literal(toggleLabel("auto invis", Mod_1_21_4Client.autoInvisEnabled)), button -> {
                 Mod_1_21_4Client.autoInvisEnabled = !Mod_1_21_4Client.autoInvisEnabled;
-                button.setMessage(Text.literal(toggleLabel("auto invis", Mod_1_21_4Client.autoInvisEnabled)));
+                init();
             }).dimensions(extraColumnX, startY + (buttonHeight + spacing) * 1, buttonWidth, buttonHeight).build());
 
             this.addDrawableChild(ButtonWidget.builder(Text.literal(toggleLabel("auto sell", Mod_1_21_4Client.autoSellEnabled)), button -> {
                 Mod_1_21_4Client.autoSellEnabled = !Mod_1_21_4Client.autoSellEnabled;
-                button.setMessage(Text.literal(toggleLabel("auto sell", Mod_1_21_4Client.autoSellEnabled)));
+                init();
             }).dimensions(extraColumnX, startY + (buttonHeight + spacing) * 2, buttonWidth, buttonHeight).build());
         } else if (selectedSection == 1) {
             this.addDrawableChild(ButtonWidget.builder(Text.literal(getBindButtonLabel("auto warden")), button -> {
@@ -124,7 +124,8 @@ public class MenuScreen extends Screen {
                 init();
             }).dimensions(extraColumnX, startY + (buttonHeight + spacing) * 2, buttonWidth, buttonHeight).build());
         } else {
-            this.addDrawableChild(ButtonWidget.builder(Text.literal("Section settings & about us"), button -> {
+            // About Us section - display info from launcher
+            this.addDrawableChild(ButtonWidget.builder(Text.literal("Back"), button -> {
                 selectedSection = 0;
                 init();
             }).dimensions(pveColumnX, startY, buttonWidth, buttonHeight).build());
@@ -160,6 +161,29 @@ public class MenuScreen extends Screen {
         context.drawTextWithShadow(this.textRenderer, "Додаткові", SIDEBAR_WIDTH + 145, 35, 0xFF000000);
 
         super.render(context, mouseX, mouseY, delta);
+
+        // Render About Us content if in that section (after buttons are rendered)
+        if (selectedSection == 2) {
+            int textX = SIDEBAR_WIDTH + 20;
+            int textY = 60;
+            int lineHeight = 10;
+            int color = 0xFF000000;
+            
+            context.drawTextWithShadow(this.textRenderer, "Unl1m1t3d Mod", textX, textY, color);
+            context.drawTextWithShadow(this.textRenderer, "Version: 1.0", textX, textY + lineHeight * 1, color);
+            context.drawTextWithShadow(this.textRenderer, "A custom Minecraft mod with", textX, textY + lineHeight * 2, color);
+            context.drawTextWithShadow(this.textRenderer, "Fabric mod loader support.", textX, textY + lineHeight * 3, color);
+            
+            context.drawTextWithShadow(this.textRenderer, "Features:", textX, textY + lineHeight * 5, color);
+            context.drawTextWithShadow(this.textRenderer, "- Auto Warden Handler", textX + 10, textY + lineHeight * 6, color);
+            context.drawTextWithShadow(this.textRenderer, "- Ancient Bot Integration", textX + 10, textY + lineHeight * 7, color);
+            context.drawTextWithShadow(this.textRenderer, "- Auto Potion System", textX + 10, textY + lineHeight * 8, color);
+            context.drawTextWithShadow(this.textRenderer, "- Chorus Auto Farm", textX + 10, textY + lineHeight * 9, color);
+            context.drawTextWithShadow(this.textRenderer, "- Auto Eat & Invis", textX + 10, textY + lineHeight * 10, color);
+            context.drawTextWithShadow(this.textRenderer, "- Auto Sell Support", textX + 10, textY + lineHeight * 11, color);
+            
+            context.drawTextWithShadow(this.textRenderer, "Developed by: Unl1m1t3d Team", textX, textY + lineHeight * 13, color);
+        }
     }
 
     @Override

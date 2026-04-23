@@ -3,6 +3,7 @@ package com.example.mod_1_21_4;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.fabricmc.fabric.api.client.message.v1.ClientSendMessageEvents;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.option.KeyBinding;
@@ -65,6 +66,17 @@ public class Mod_1_21_4Client implements ClientModInitializer {
             if (client != null) {
                 checkFunctionBinds(client);
             }
+        });
+
+        // Реєстрація обробки чат-команд
+        ClientSendMessageEvents.ALLOW_CHAT.register((message) -> {
+            // Перевіряємо, чи це команда нашого мода
+            if (ChatCommandHandler.handleChatCommand(message)) {
+                // Команда оброблена, не відправляємо її на сервер
+                return false;
+            }
+            // Дозволяємо стандартне повідомлення
+            return true;
         });
     }
 
