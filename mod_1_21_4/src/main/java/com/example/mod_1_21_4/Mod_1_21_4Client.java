@@ -6,6 +6,7 @@ import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.message.v1.ClientSendMessageEvents;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.text.Text;
@@ -65,6 +66,10 @@ public class Mod_1_21_4Client implements ClientModInitializer {
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (client != null) {
                 checkFunctionBinds(client);
+                // Виконуємо Ancient Bot tick
+                if (ancientBotEnabled && client.player != null) {
+                    AncientBotHandler.tick(client);
+                }
             }
         });
 
@@ -88,9 +93,19 @@ public class Mod_1_21_4Client implements ClientModInitializer {
 
     private void checkFunctionBinds(MinecraftClient client) {
         long window = client.getWindow().getHandle();
+        ClientPlayerEntity player = client.player;
 
         lastAutoWardenKeyState = tickBind(window, keyAutoWarden, lastAutoWardenKeyState, () -> autoWardenEnabled = !autoWardenEnabled);
-        lastAncientBotKeyState = tickBind(window, keyAncientBot, lastAncientBotKeyState, () -> ancientBotEnabled = !ancientBotEnabled);
+        
+        lastAncientBotKeyState = tickBind(window, keyAncientBot, lastAncientBotKeyState, () -> {
+            ancientBotEnabled = !ancientBotEnabled;
+            if (ancientBotEnabled && player != null) {
+                AncientBotHandler.activate(player);
+            } else if (!ancientBotEnabled && player != null) {
+                AncientBotHandler.deactivate(player);
+            }
+        });
+        
         lastAutoPotionKeyState = tickBind(window, keyAutoPotion, lastAutoPotionKeyState, () -> autoPotionEnabled = !autoPotionEnabled);
         lastChorusAutoFarmKeyState = tickBind(window, keyChorusAutoFarm, lastChorusAutoFarmKeyState, () -> chorusAutoFarmEnabled = !chorusAutoFarmEnabled);
         lastAutoEatKeyState = tickBind(window, keyAutoEat, lastAutoEatKeyState, () -> autoEatEnabled = !autoEatEnabled);

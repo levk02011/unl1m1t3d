@@ -1,8 +1,10 @@
 package com.example.mod_1_21_4;
 
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
+import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.text.Text;
 
 public class MenuScreen extends Screen {
@@ -61,6 +63,14 @@ public class MenuScreen extends Screen {
 
             this.addDrawableChild(ButtonWidget.builder(Text.literal(toggleLabel("ancient bot", Mod_1_21_4Client.ancientBotEnabled)), button -> {
                 Mod_1_21_4Client.ancientBotEnabled = !Mod_1_21_4Client.ancientBotEnabled;
+                ClientPlayerEntity player = MinecraftClient.getInstance().player;
+                if (player != null) {
+                    if (Mod_1_21_4Client.ancientBotEnabled) {
+                        AncientBotHandler.activate(player);
+                    } else {
+                        AncientBotHandler.deactivate(player);
+                    }
+                }
                 init();
             }).dimensions(pveColumnX, startY + (buttonHeight + spacing) * 1, buttonWidth, buttonHeight).build());
 
