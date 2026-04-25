@@ -30,6 +30,19 @@ public class AncientBotHandler {
     private static List<BlockPos> ancientDebrisLocations = new ArrayList<>();
     private static int currentDebrisIndex = 0;
     
+    // State for block analysis across multiple ticks
+    private static Map<BlockPos, Integer> blockDensity = new HashMap<>();
+    private static int analysisX = -SEARCH_RADIUS;
+    private static int analysisY = -SEARCH_RADIUS;
+    private static int analysisZ = -SEARCH_RADIUS;
+    private static boolean analysisComplete = false;
+    
+    // State for debris search across multiple ticks
+    private static int debrisSearchX = -50;
+    private static int debrisSearchZ = -50;
+    private static int debrisSearchY = 0;
+    private static boolean debrisSearchComplete = false;
+    
     enum State {
         IDLE, ANALYZING_BLOCKS, SELECTING_LOCATION, DRINKING_FIRE_RESISTANCE,
         MOVING_TO_CENTER, PLACING_TNT, TNT_PLACED, GOING_TO_HUB,
@@ -104,12 +117,39 @@ public class AncientBotHandler {
         stateStartTime = System.currentTimeMillis();
         ancientDebrisLocations.clear();
         currentDebrisIndex = 0;
+        
+        // Reset analysis state
+        analysisX = -SEARCH_RADIUS;
+        analysisY = -SEARCH_RADIUS;
+        analysisZ = -SEARCH_RADIUS;
+        blockDensity.clear();
+        analysisComplete = false;
+        
+        // Reset debris search state
+        debrisSearchX = -50;
+        debrisSearchZ = -50;
+        debrisSearchY = 0;
+        debrisSearchComplete = false;
     }
     
     public static void deactivate(ClientPlayerEntity player) {
         currentState = State.IDLE;
         targetCenter = null;
         potionStartTime = 0;
+        
+        // Reset analysis state
+        analysisX = -SEARCH_RADIUS;
+        analysisY = -SEARCH_RADIUS;
+        analysisZ = -SEARCH_RADIUS;
+        blockDensity.clear();
+        analysisComplete = false;
+        
+        // Reset debris search state
+        debrisSearchX = -50;
+        debrisSearchZ = -50;
+        debrisSearchY = 0;
+        debrisSearchComplete = false;
+        
         player.sendMessage(Text.literal("§cAncient Bot деактивований."), false);
     }
     
@@ -127,29 +167,45 @@ public class AncientBotHandler {
         World world = player.getWorld();
         BlockPos playerPos = player.getBlockPos();
         
-        Map<BlockPos, Integer> blockDensity = new HashMap<>();
+        // Process one slice per tick to prevent freezing
+        if (analysisY > SEARCH_RADIUS) {
+            // Analysis complete
+            player.sendMessage(Text.literal("§a✓ Аналіз завершен. Знайдено " + blockDensity.size() + " кандидатів."), false);
+            
+            if (blockDensity.isEmpty()) {
+                player.sendMessage(Text.literal("§cПомилка: не знайдено блоків для аналізу!"), false);
+                currentState = State.ERROR_HUB;
+            } else {
+                currentState = State.SELECTING_LOCATION;
+            }
+            
+            // Reset analysis state
+            analysisX = -SEARCH_RADIUS;
+            analysisY = -SEARCH_RADIUS;
+            analysisZ = -SEARCH_RADIUS;
+            blockDensity.clear();
+            return;
+        }
         
+        // Process one layer this tick
         for (int x = -SEARCH_RADIUS; x <= SEARCH_RADIUS; x++) {
-            for (int y = -SEARCH_RADIUS; y <= SEARCH_RADIUS; y++) {
-                for (int z = -SEARCH_RADIUS; z <= SEARCH_RADIUS; z++) {
-                    double dist = Math.sqrt(x*x + y*y + z*z);
-                    if (dist <= SEARCH_RADIUS + MAX_ERROR) {
-                        BlockPos checkPos = playerPos.add(x, y, z);
-                        if (!world.getBlockState(checkPos).isAir()) {
-                            BlockPos gridPos = new BlockPos(
-                                (checkPos.getX() / 5) * 5,
-                                (checkPos.getY() / 5) * 5,
-                                (checkPos.getZ() / 5) * 5
-                            );
-                            blockDensity.put(gridPos, blockDensity.getOrDefault(gridPos, 0) + 1);
-                        }
+            for (int z = -SEARCH_RADIUS; z <= SEARCH_RADIUS; z++) {
+                double dist = Math.sqrt(x*x + analysisY*analysisY + z*z);
+                if (dist <= SEARCH_RADIUS + MAX_ERROR) {
+                    BlockPos checkPos = playerPos.add(x, analysisY, z);
+                    if (!world.getBlockState(checkPos).isAir()) {
+                        BlockPos gridPos = new BlockPos(
+                            (checkPos.getX() / 5) * 5,
+                            (checkPos.getY() / 5) * 5,
+                            (checkPos.getZ() / 5) * 5
+                        );
+                        blockDensity.put(gridPos, blockDensity.getOrDefault(gridPos, 0) + 1);
                     }
                 }
             }
         }
         
-        player.sendMessage(Text.literal("§a✓ Аналіз завершен. Знайдено " + blockDensity.size() + " кандидатів."), false);
-        currentState = State.SELECTING_LOCATION;
+        analysisY++;
     }
     
     private static void selectBestLocation(ClientPlayerEntity player) {
@@ -248,8 +304,30 @@ public class AncientBotHandler {
             player.sendMessage(Text.literal("§a✓ Прибув в центр."), false);
             currentState = State.PLACING_TNT;
         } else {
-            Vec3d newPos = playerVec.lerp(targetVec, 0.1);
-            player.setPos(newPos.x, newPos.y, newPos.z);
+            // Break blocks in the path
+            breakBlocksInDirection(player, targetVec);
+            
+            // Smooth movement with velocity instead of direct position setting
+            Vec3d direction = targetVec.subtract(playerVec).normalize();
+            double moveSpeed = 0.1;
+            player.setVelocity(direction.multiply(moveSpeed));
+        }
+    }
+    
+    private static void breakBlocksInDirection(ClientPlayerEntity player, Vec3d targetVec) {
+        Vec3d playerVec = player.getPos();
+        Vec3d direction = targetVec.subtract(playerVec).normalize();
+        
+        // Check and break blocks in a 3x3x3 cube in front of the player
+        for (double offset = 0.5; offset <= 3.0; offset += 0.5) {
+            Vec3d checkVec = playerVec.add(direction.multiply(offset));
+            BlockPos checkPos = BlockPos.ofFloored(checkVec);
+            
+            World world = player.getWorld();
+            if (!world.getBlockState(checkPos).isAir()) {
+                // Try to break the block
+                MinecraftClient.getInstance().interactionManager.attackBlock(checkPos, net.minecraft.util.math.Direction.UP);
+            }
         }
     }
     
@@ -317,39 +395,51 @@ public class AncientBotHandler {
         World world = player.getWorld();
         BlockPos playerPos = player.getBlockPos();
         
-        ancientDebrisLocations.clear();
+        // Reset on first call
+        if (debrisSearchX == -50 && debrisSearchZ == -50 && debrisSearchY == 0) {
+            ancientDebrisLocations.clear();
+        }
         
-        for (int x = -100; x <= 100; x++) {
-            for (int z = -100; z <= 100; z++) {
-                for (int y = 0; y < 256; y++) {
-                    BlockPos checkPos = new BlockPos(playerPos.getX() + x, y, playerPos.getZ() + z);
-                    if (world.getBlockState(checkPos).getBlock() == Blocks.ANCIENT_DEBRIS) {
-                        if (isExposedBlock(world, checkPos)) {
-                            ancientDebrisLocations.add(checkPos);
-                        }
+        // Search one X-column per tick to prevent lag (50 block search radius)
+        int searchLimit = 50;
+        
+        for (int z = -searchLimit; z <= searchLimit; z++) {
+            for (int y = 0; y < 256; y++) {
+                BlockPos checkPos = new BlockPos(playerPos.getX() + debrisSearchX, y, playerPos.getZ() + z);
+                if (world.getBlockState(checkPos).getBlock() == Blocks.ANCIENT_DEBRIS) {
+                    if (isExposedBlock(world, checkPos)) {
+                        ancientDebrisLocations.add(checkPos);
                     }
                 }
             }
         }
         
-        if (ancientDebrisLocations.isEmpty()) {
-            player.sendMessage(Text.literal("§cДавні обломки не знайдені. Шукаю нове місце для підриву..."), false);
-            currentState = State.ANALYZING_BLOCKS;
-            return;
+        debrisSearchX++;
+        
+        // Search complete when we've covered the radius
+        if (debrisSearchX > searchLimit) {
+            if (ancientDebrisLocations.isEmpty()) {
+                player.sendMessage(Text.literal("§cДавні обломки не знайдені. Шукаю нове місце для підриву..."), false);
+                currentState = State.ANALYZING_BLOCKS;
+            } else {
+                ancientDebrisLocations.sort((a, b) -> 
+                    Double.compare(a.getSquaredDistance(playerPos), b.getSquaredDistance(playerPos))
+                );
+                
+                player.sendMessage(
+                    Text.literal("§a✓ Знайдено " + ancientDebrisLocations.size() + " древніх обломків."),
+                    false
+                );
+                
+                currentDebrisIndex = 0;
+                currentState = State.COLLECTING_DEBRIS;
+            }
+            
+            // Reset search state
+            debrisSearchX = -searchLimit;
+            debrisSearchZ = -searchLimit;
+            debrisSearchY = 0;
         }
-        
-        ancientDebrisLocations.sort((a, b) -> 
-            Double.compare(a.getSquaredDistance(playerPos), b.getSquaredDistance(playerPos))
-        );
-        
-        player.sendMessage(
-            Text.literal("§a✓ Знайдено " + ancientDebrisLocations.size() + " древніх обломків."),
-            false
-        );
-        
-        currentDebrisIndex = 0;
-        currentState = State.COLLECTING_DEBRIS;
-        stateStartTime = System.currentTimeMillis();
     }
     
     private static boolean isExposedBlock(World world, BlockPos pos) {
@@ -387,8 +477,13 @@ public class AncientBotHandler {
             player.sendMessage(Text.literal("§6Збираю обломок " + (currentDebrisIndex + 1) + "/" + ancientDebrisLocations.size()), false);
             currentDebrisIndex++;
         } else {
-            Vec3d newPos = playerVec.lerp(targetVec, 0.15);
-            player.setPos(newPos.x, newPos.y, newPos.z);
+            // Break blocks in the path
+            breakBlocksInDirection(player, targetVec);
+            
+            // Smooth movement with velocity instead of direct position setting
+            Vec3d direction = targetVec.subtract(playerVec).normalize();
+            double moveSpeed = 0.15;
+            player.setVelocity(direction.multiply(moveSpeed));
         }
         
         checkAndRepeatPotion(player);
