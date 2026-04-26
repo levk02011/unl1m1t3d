@@ -43,6 +43,14 @@ public class AncientBotHandler {
     private static int debrisSearchY = 0;
     private static boolean debrisSearchComplete = false;
     
+    // State for pathfinding and block breaking
+    private static List<BlockPos> miningPath = new ArrayList<>();
+    private static int currentMiningIndex = 0;
+    private static long lastBreakTime = 0;
+    private static final long BREAK_DELAY = 50; // мс між ударами (більш швидко)
+    private static BlockPos currentlyMiningBlock = null;
+    private static int miningTicks = 0;
+    
     enum State {
         IDLE, ANALYZING_BLOCKS, SELECTING_LOCATION, DRINKING_FIRE_RESISTANCE,
         MOVING_TO_CENTER, PLACING_TNT, TNT_PLACED, GOING_TO_HUB,
@@ -130,6 +138,13 @@ public class AncientBotHandler {
         debrisSearchZ = -50;
         debrisSearchY = 0;
         debrisSearchComplete = false;
+        
+        // Reset mining state
+        miningPath.clear();
+        currentMiningIndex = 0;
+        lastBreakTime = 0;
+        currentlyMiningBlock = null;
+        miningTicks = 0;
     }
     
     public static void deactivate(ClientPlayerEntity player) {
@@ -149,6 +164,13 @@ public class AncientBotHandler {
         debrisSearchZ = -50;
         debrisSearchY = 0;
         debrisSearchComplete = false;
+        
+        // Reset mining state
+        miningPath.clear();
+        currentMiningIndex = 0;
+        lastBreakTime = 0;
+        currentlyMiningBlock = null;
+        miningTicks = 0;
         
         player.sendMessage(Text.literal("§cAncient Bot деактивований."), false);
     }
@@ -303,15 +325,158 @@ public class AncientBotHandler {
         if (dist < 1.5) {
             player.sendMessage(Text.literal("§a✓ Прибув в центр."), false);
             currentState = State.PLACING_TNT;
+            miningPath.clear();
+            currentMiningIndex = 0;
+            currentlyMiningBlock = null;
+            miningTicks = 0;
         } else {
-            // Break blocks in the path
-            breakBlocksInDirection(player, targetVec);
+            // Build and execute mining path
+            if (miningPath.isEmpty()) {
+                buildMiningPath(player, targetVec);
+            }
             
-            // Smooth movement with velocity instead of direct position setting
-            Vec3d direction = targetVec.subtract(playerVec).normalize();
-            double moveSpeed = 0.1;
-            player.setVelocity(direction.multiply(moveSpeed));
+            if (!miningPath.isEmpty()) {
+                mineThroughBlocks(player, targetVec);
+            }
         }
+    }
+    
+    private static void buildMiningPath(ClientPlayerEntity player, Vec3d targetVec) {
+        Vec3d playerVec = player.getPos();
+        BlockPos playerPos = player.getBlockPos();
+        BlockPos targetPos = BlockPos.ofFloored(targetVec);
+        
+        miningPath.clear();
+        
+        // Сканувати яких блоків треба копати на маршруті до центру
+        int steps = 20;
+        for (int i = 0; i <= steps; i++) {
+            double t = (double) i / steps;
+            Vec3d pointOnPath = playerVec.lerp(targetVec, t);
+            BlockPos checkPos = BlockPos.ofFloored(pointOnPath);
+            
+            // Перевірити куб 3x3x3 навколо маршруту
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dy = -1; dy <= 1; dy++) {
+                    for (int dz = -1; dz <= 1; dz++) {
+                        BlockPos blockToCheck = checkPos.add(dx, dy, dz);
+                        if (!player.getWorld().getBlockState(blockToCheck).isAir() &&
+                            !isSolidUnbreakable(player, blockToCheck)) {
+                            // Показати блок на карті (частинкою або лог)
+                            player.sendMessage(
+                                Text.literal("§6[Копання] Блок на: " + blockToCheck.toShortString()),
+                                true // Actionbar - миготить повідомлення
+                            );
+                            miningPath.add(blockToCheck);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Видалити дублікати
+        List<BlockPos> uniquePath = new ArrayList<>();
+        for (BlockPos pos : miningPath) {
+            if (!uniquePath.contains(pos)) {
+                uniquePath.add(pos);
+            }
+        }
+        miningPath = uniquePath;
+        
+        if (!miningPath.isEmpty()) {
+            player.sendMessage(Text.literal("§e→ Знайдено " + miningPath.size() + " блоків для копання"), false);
+        }
+    }
+    
+    private static void mineThroughBlocks(ClientPlayerEntity player, Vec3d targetVec) {
+        if (currentMiningIndex >= miningPath.size()) {
+            currentMiningIndex = 0;
+            miningPath.clear();
+            currentlyMiningBlock = null;
+            miningTicks = 0;
+            
+            // Продовжити рух до центру
+            Vec3d playerVec = player.getPos();
+            Vec3d direction = targetVec.subtract(playerVec).normalize();
+            double moveSpeed = 0.08;
+            player.setVelocity(direction.multiply(moveSpeed));
+            return;
+        }
+        
+        BlockPos targetBlock = miningPath.get(currentMiningIndex);
+        World world = player.getWorld();
+        
+        // Перевірити, чи блок вже розбитий
+        if (world.getBlockState(targetBlock).isAir()) {
+            currentMiningIndex++;
+            currentlyMiningBlock = null;
+            miningTicks = 0;
+            return;
+        }
+        
+        // Якщо це новий блок, почати копати його
+        if (!targetBlock.equals(currentlyMiningBlock)) {
+            currentlyMiningBlock = targetBlock;
+            miningTicks = 0;
+        }
+        
+        // Вибрати кайл з інвентарю
+        selectPickaxeInInventory(player);
+        
+        // Визначити напрямок для атаки
+        net.minecraft.util.math.Direction breakDirection = getBreakDirection(player.getBlockPos(), targetBlock);
+        
+        // Постійно атакувати блок без затримки
+        MinecraftClient.getInstance().interactionManager.attackBlock(targetBlock, breakDirection);
+        player.swingHand(net.minecraft.util.Hand.MAIN_HAND);
+        
+        miningTicks++;
+        
+        // Показати гравцю, який блок копаємо (actionbar)
+        player.sendMessage(
+            Text.literal("§c⛏ Копаю: " + targetBlock.toShortString() + " [" + (currentMiningIndex + 1) + "/" + miningPath.size() + "] (" + miningTicks + " тиків)"),
+            true
+        );
+        
+        // Якщо копаємо занадто довго - перейти до наступного блока
+        if (miningTicks > 300) { // 15 секунд на один блок (300 тиків на 20 TPS)
+            currentMiningIndex++;
+            currentlyMiningBlock = null;
+            miningTicks = 0;
+        }
+    }
+    
+    private static net.minecraft.util.math.Direction getBreakDirection(BlockPos fromPos, BlockPos targetPos) {
+        int dx = Integer.compare(targetPos.getX(), fromPos.getX());
+        int dy = Integer.compare(targetPos.getY(), fromPos.getY());
+        int dz = Integer.compare(targetPos.getZ(), fromPos.getZ());
+        
+        if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > Math.abs(dz)) {
+            return dy > 0 ? net.minecraft.util.math.Direction.UP : net.minecraft.util.math.Direction.DOWN;
+        } else if (Math.abs(dz) > Math.abs(dx)) {
+            return dz > 0 ? net.minecraft.util.math.Direction.SOUTH : net.minecraft.util.math.Direction.NORTH;
+        } else {
+            return dx > 0 ? net.minecraft.util.math.Direction.EAST : net.minecraft.util.math.Direction.WEST;
+        }
+    }
+    
+    private static void selectPickaxeInInventory(ClientPlayerEntity player) {
+        for (int i = 0; i < player.getInventory().size(); i++) {
+            ItemStack stack = player.getInventory().getStack(i);
+            if (stack.getItem() instanceof net.minecraft.item.PickaxeItem) {
+                player.getInventory().selectedSlot = i;
+                return;
+            }
+        }
+    }
+    
+    private static boolean isSolidUnbreakable(ClientPlayerEntity player, BlockPos pos) {
+        World world = player.getWorld();
+        net.minecraft.block.Block block = world.getBlockState(pos).getBlock();
+        
+        // Блоки, які не можна копати
+        return block == Blocks.BEDROCK || 
+               block == Blocks.OBSIDIAN;
     }
     
     private static void breakBlocksInDirection(ClientPlayerEntity player, Vec3d targetVec) {
@@ -465,6 +630,10 @@ public class AncientBotHandler {
         if (currentDebrisIndex >= ancientDebrisLocations.size()) {
             player.sendMessage(Text.literal("§a✓ Всі давні обломки зібрані!"), false);
             currentState = State.ANALYZING_BLOCKS;
+            miningPath.clear();
+            currentMiningIndex = 0;
+            currentlyMiningBlock = null;
+            miningTicks = 0;
             return;
         }
         
@@ -476,14 +645,19 @@ public class AncientBotHandler {
         if (dist < 1.5) {
             player.sendMessage(Text.literal("§6Збираю обломок " + (currentDebrisIndex + 1) + "/" + ancientDebrisLocations.size()), false);
             currentDebrisIndex++;
+            miningPath.clear();
+            currentMiningIndex = 0;
+            currentlyMiningBlock = null;
+            miningTicks = 0;
         } else {
-            // Break blocks in the path
-            breakBlocksInDirection(player, targetVec);
+            // Build and execute mining path
+            if (miningPath.isEmpty()) {
+                buildMiningPath(player, targetVec);
+            }
             
-            // Smooth movement with velocity instead of direct position setting
-            Vec3d direction = targetVec.subtract(playerVec).normalize();
-            double moveSpeed = 0.15;
-            player.setVelocity(direction.multiply(moveSpeed));
+            if (!miningPath.isEmpty()) {
+                mineThroughBlocks(player, targetVec);
+            }
         }
         
         checkAndRepeatPotion(player);
