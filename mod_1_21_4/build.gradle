@@ -26,6 +26,9 @@ dependencies {
 	// Fabric API. This is technically optional, but you probably want it anyway.
 	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 
+	// JSON support (Gson)
+	implementation "com.google.code.gson:gson:2.10.1"
+
 	// Uncomment the following line to enable the deprecated Fabric API modules.
 	// These are included in the Fabric API production jar in 1.17+ and above.
 	// modImplementation "net.fabricmc.fabric-api:fabric-api-deprecated:${project.fabric_version}"
