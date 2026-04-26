@@ -50,6 +50,7 @@ public class AncientBotHandler {
     private static final long BREAK_DELAY = 50; // мс між ударами (більш швидко)
     private static BlockPos currentlyMiningBlock = null;
     private static int miningTicks = 0;
+    private static boolean breakingStarted = false;
     
     enum State {
         IDLE, ANALYZING_BLOCKS, SELECTING_LOCATION, DRINKING_FIRE_RESISTANCE,
@@ -145,6 +146,7 @@ public class AncientBotHandler {
         lastBreakTime = 0;
         currentlyMiningBlock = null;
         miningTicks = 0;
+        breakingStarted = false;
     }
     
     public static void deactivate(ClientPlayerEntity player) {
@@ -171,6 +173,7 @@ public class AncientBotHandler {
         lastBreakTime = 0;
         currentlyMiningBlock = null;
         miningTicks = 0;
+        breakingStarted = false;
         
         player.sendMessage(Text.literal("§cAncient Bot деактивований."), false);
     }
@@ -296,7 +299,8 @@ public class AncientBotHandler {
         int slotIndex = findInventorySlot(player, fireResistancePotion);
         if (slotIndex != -1) {
             player.getInventory().selectedSlot = slotIndex;
-            MinecraftClient.getInstance().interactionManager.clickCreativeStack(fireResistancePotion, 1);
+            // Почати пити зілля - установити активну руку
+            player.setCurrentHand(net.minecraft.util.Hand.MAIN_HAND);
         }
         
         potionStartTime = System.currentTimeMillis();
@@ -329,6 +333,7 @@ public class AncientBotHandler {
             currentMiningIndex = 0;
             currentlyMiningBlock = null;
             miningTicks = 0;
+            breakingStarted = false;
         } else {
             // Build and execute mining path
             if (miningPath.isEmpty()) {
@@ -394,6 +399,7 @@ public class AncientBotHandler {
             miningPath.clear();
             currentlyMiningBlock = null;
             miningTicks = 0;
+            breakingStarted = false;
             
             // Продовжити рух до центру
             Vec3d playerVec = player.getPos();
@@ -411,6 +417,7 @@ public class AncientBotHandler {
             currentMiningIndex++;
             currentlyMiningBlock = null;
             miningTicks = 0;
+            breakingStarted = false;
             return;
         }
         
@@ -418,6 +425,7 @@ public class AncientBotHandler {
         if (!targetBlock.equals(currentlyMiningBlock)) {
             currentlyMiningBlock = targetBlock;
             miningTicks = 0;
+            breakingStarted = false;
         }
         
         // Вибрати кайл з інвентарю
@@ -426,10 +434,14 @@ public class AncientBotHandler {
         // Визначити напрямок для атаки
         net.minecraft.util.math.Direction breakDirection = getBreakDirection(player.getBlockPos(), targetBlock);
         
-        // Постійно атакувати блок без затримки
-        MinecraftClient.getInstance().interactionManager.attackBlock(targetBlock, breakDirection);
-        player.swingHand(net.minecraft.util.Hand.MAIN_HAND);
+        // Почати копання (перший раз)
+        if (!breakingStarted) {
+            MinecraftClient.getInstance().interactionManager.attackBlock(targetBlock, breakDirection);
+            breakingStarted = true;
+        }
         
+        // Постійно копати блок кілька тиків
+        player.swingHand(net.minecraft.util.Hand.MAIN_HAND);
         miningTicks++;
         
         // Показати гравцю, який блок копаємо (actionbar)
@@ -438,11 +450,15 @@ public class AncientBotHandler {
             true
         );
         
-        // Якщо копаємо занадто довго - перейти до наступного блока
-        if (miningTicks > 300) { // 15 секунд на один блок (300 тиків на 20 TPS)
+        // Спробувати розбити блок після достатньої кількості тиків
+        // У Hard difficulty с железным киркой ~7-8 тиков для камня
+        if (miningTicks >= 30) {
+            // Завершити копання через breakBlock
+            MinecraftClient.getInstance().interactionManager.breakBlock(targetBlock);
             currentMiningIndex++;
             currentlyMiningBlock = null;
             miningTicks = 0;
+            breakingStarted = false;
         }
     }
     
@@ -510,7 +526,19 @@ public class AncientBotHandler {
         int slotIndex = findInventorySlot(player, tnt);
         if (slotIndex != -1) {
             player.getInventory().selectedSlot = slotIndex;
-            MinecraftClient.getInstance().interactionManager.clickCreativeStack(tnt, 0);
+            
+            // Постави TNT в центрі - взаємодія з блоком під центром
+            BlockPos placePos = targetCenter.down();
+            net.minecraft.util.math.Direction direction = net.minecraft.util.math.Direction.UP;
+            Vec3d hitVec = Vec3d.ofCenter(placePos).add(0, 1, 0);
+            
+            // Клікнути правою кнопкою на блок, щоб поставити TNT
+            MinecraftClient.getInstance().interactionManager.interactBlock(
+                player,
+                net.minecraft.util.Hand.MAIN_HAND,
+                new net.minecraft.util.hit.BlockHitResult(hitVec, direction, placePos, false)
+            );
+            player.swingHand(net.minecraft.util.Hand.MAIN_HAND);
         }
         
         player.sendMessage(Text.literal("§a✓ TNT розміщено в центрі."), false);
@@ -539,7 +567,18 @@ public class AncientBotHandler {
         int slotIndex = findInventorySlot(player, flintAndSteel);
         if (slotIndex != -1) {
             player.getInventory().selectedSlot = slotIndex;
-            MinecraftClient.getInstance().interactionManager.clickCreativeStack(flintAndSteel, 1);
+            
+            // Поджечь TNT - взаємодія з TNT блоком
+            net.minecraft.util.math.Direction direction = net.minecraft.util.math.Direction.UP;
+            Vec3d hitVec = Vec3d.ofCenter(targetCenter).add(0, 0.5, 0);
+            
+            // Клікнути правою кнопкою на TNT, щоб його запалити
+            MinecraftClient.getInstance().interactionManager.interactBlock(
+                player,
+                net.minecraft.util.Hand.MAIN_HAND,
+                new net.minecraft.util.hit.BlockHitResult(hitVec, direction, targetCenter, false)
+            );
+            player.swingHand(net.minecraft.util.Hand.MAIN_HAND);
         }
         
         player.sendMessage(Text.literal("§a✓ TNT розпалено!"), false);
@@ -634,6 +673,7 @@ public class AncientBotHandler {
             currentMiningIndex = 0;
             currentlyMiningBlock = null;
             miningTicks = 0;
+            breakingStarted = false;
             return;
         }
         
@@ -649,6 +689,7 @@ public class AncientBotHandler {
             currentMiningIndex = 0;
             currentlyMiningBlock = null;
             miningTicks = 0;
+            breakingStarted = false;
         } else {
             // Build and execute mining path
             if (miningPath.isEmpty()) {
