@@ -70,6 +70,18 @@ public class Mod_1_21_4Client implements ClientModInitializer {
                 if (ancientBotEnabled && client.player != null) {
                     AncientBotHandler.tick(client);
                 }
+                // Виконуємо Auto Eat tick
+                if (autoEatEnabled && client.player != null) {
+                    AutoEatHandler.tick(client);
+                }
+                // Виконуємо Auto Invis tick
+                if (autoInvisEnabled && client.player != null) {
+                    AutoInvisHandler.tick(client);
+                }
+                // Виконуємо Auto Sell tick
+                if (autoSellEnabled && client.player != null) {
+                    AutoSellHandler.tick(client);
+                }
             }
         });
 
