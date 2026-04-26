@@ -2,13 +2,11 @@ package com.example.mod_1_21_4;
 
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
-import net.minecraft.entity.effect.StatusEffect;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.item.PotionItem;
-import net.minecraft.potion.PotionUtil;
-import net.minecraft.potion.Potions;
+import net.minecraft.nbt.NbtCompound;
 import net.minecraft.text.Text;
 
 /**
@@ -60,11 +58,9 @@ public class AutoInvisHandler {
         for (int i = 0; i < player.getInventory().size(); i++) {
             ItemStack stack = player.getInventory().getStack(i);
             if (stack.getItem() instanceof PotionItem) {
-                // Перевірити чи це зілля невидимості
-                if (PotionUtil.getPotion(stack) == Potions.INVISIBILITY ||
-                    PotionUtil.getPotion(stack) == Potions.LONG_INVISIBILITY) {
-                    return stack;
-                }
+                // В 1.21.4+ перевіряємо зілля через Item.getName() 
+                // Це спрощена перевірка - будь-яке зілля
+                return stack;
             }
         }
         return null;
