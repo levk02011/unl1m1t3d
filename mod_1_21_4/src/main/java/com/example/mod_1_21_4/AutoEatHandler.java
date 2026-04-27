@@ -81,7 +81,20 @@ public class AutoEatHandler {
 
     private static boolean isFoodItem(ItemStack stack) {
         if (stack.isEmpty()) return false;
-        return stack.getItem().isFood();
+        // Перевірка через список відомих харчових предметів
+        return isKnownFoodItem(stack.getItem());
+    }
+    
+    private static boolean isKnownFoodItem(net.minecraft.item.Item item) {
+        // Список відомих харчових предметів
+        return item == Items.BREAD || item == Items.COOKED_PORKCHOP || 
+               item == Items.COOKED_BEEF || item == Items.COOKED_CHICKEN ||
+               item == Items.COOKED_MUTTON || item == Items.COOKED_RABBIT ||
+               item == Items.GOLDEN_APPLE || item == Items.ENCHANTED_GOLDEN_APPLE ||
+               item == Items.CARROT || item == Items.GOLDEN_CARROT ||
+               item == Items.APPLE || item == Items.SWEET_BERRIES ||
+               item == Items.HONEY_BOTTLE || item == Items.POTION ||
+               item == Items.MILK_BUCKET;
     }
 
     private static int findInventorySlot(ClientPlayerEntity player, ItemStack target) {
