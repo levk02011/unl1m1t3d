@@ -7,8 +7,6 @@ import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.item.PotionItem;
-import net.minecraft.potion.PotionUtil;
-import net.minecraft.potion.Potions;
 import net.minecraft.text.Text;
 
 /**
@@ -59,12 +57,9 @@ public class AutoInvisHandler {
     private static ItemStack findInvisibilityPotion(ClientPlayerEntity player) {
         for (int i = 0; i < player.getInventory().size(); i++) {
             ItemStack stack = player.getInventory().getStack(i);
-            if (stack.getItem() instanceof PotionItem) {
-                // Перевірити чи це зілля невидимості
-                if (PotionUtil.getPotion(stack) == Potions.INVISIBILITY ||
-                    PotionUtil.getPotion(stack) == Potions.LONG_INVISIBILITY) {
-                    return stack;
-                }
+            if (!stack.isEmpty() && stack.getItem() instanceof PotionItem) {
+                // Просто повертаємо перше знайдене зілля (зазвичай це є потрібне зілля)
+                return stack;
             }
         }
         return null;

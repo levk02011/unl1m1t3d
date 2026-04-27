@@ -13,6 +13,8 @@ import net.minecraft.text.Text;
 public class AutoEatHandler {
     private static final int HUNGER_THRESHOLD = 2; // Їсти коли голод впав на 1-2 одиниці
     private static boolean lastFoodState = false;
+    private static int eatingTicks = 0;
+    private static final int EATING_DURATION = 32; // Тики їдення
 
     public static void tick(MinecraftClient client) {
         ClientPlayerEntity player = client.player;
@@ -20,6 +22,13 @@ public class AutoEatHandler {
 
         HungerManager hungerManager = player.getHungerManager();
         int currentHunger = hungerManager.getFoodLevel();
+
+        // Якщо вже їємо - продовжуємо
+        if (eatingTicks > 0) {
+            eatingTicks--;
+            player.setCurrentHand(net.minecraft.util.Hand.MAIN_HAND);
+            return;
+        }
 
         // Перевірити чи голод низький
         if (currentHunger <= HUNGER_THRESHOLD && !lastFoodState) {
@@ -51,7 +60,8 @@ public class AutoEatHandler {
         // Установити вибраний слот
         player.getInventory().selectedSlot = Math.min(slotIndex, 8);
 
-        // Почати їсти
+        // Почати їсти - триватиме EATING_DURATION тиків
+        eatingTicks = EATING_DURATION;
         player.setCurrentHand(net.minecraft.util.Hand.MAIN_HAND);
         player.sendMessage(Text.literal("§a🍖 Auto Eat: їм!"), true);
     }
@@ -81,7 +91,8 @@ public class AutoEatHandler {
 
     private static boolean isFoodItem(ItemStack stack) {
         if (stack.isEmpty()) return false;
-        return stack.getItem().isFood();
+        // Перевіряємо чи ItemStack має можливість бути з'їденим
+        return stack.getItem().getComponents().get(net.minecraft.component.DataComponentTypes.FOOD) != null;
     }
 
     private static int findInventorySlot(ClientPlayerEntity player, ItemStack target) {

@@ -14,6 +14,7 @@ from uuid import uuid1
 
 import re
 import subprocess
+import sys
 from sys import argv, exit
 import shutil
 import urllib.request
@@ -382,9 +383,17 @@ class MainWindow(QMainWindow):
         self.start_progress.setProperty('value', 24)
         self.start_progress.setVisible(False)
         
+        self.build_button = QPushButton(self.centralwidget)
+        self.build_button.setText('🔨 Build Mod')
+        self.build_button.clicked.connect(self.build_mod)
+        
         self.start_button = QPushButton(self.centralwidget)
         self.start_button.setText('Play')
         self.start_button.clicked.connect(self.launch_game)
+        
+        self.buttons_layout = QHBoxLayout()
+        self.buttons_layout.addWidget(self.build_button)
+        self.buttons_layout.addWidget(self.start_button)
         
         self.vertical_layout = QVBoxLayout(self.centralwidget)
         self.vertical_layout.setContentsMargins(15, 15, 15, 15)
@@ -395,7 +404,7 @@ class MainWindow(QMainWindow):
         self.vertical_layout.addItem(self.progress_spacer)
         self.vertical_layout.addWidget(self.start_progress_label) # Исправил проблему с созданием описания для полосы прогресса [24:01]
         self.vertical_layout.addWidget(self.start_progress)
-        self.vertical_layout.addWidget(self.start_button)
+        self.vertical_layout.addLayout(self.buttons_layout)
 
         self.launch_thread = LaunchThread()
         self.launch_thread.state_update_signal.connect(self.state_update)
@@ -405,12 +414,32 @@ class MainWindow(QMainWindow):
     
     def state_update(self, value):
         self.start_button.setDisabled(value)
+        self.build_button.setDisabled(value)
         self.start_progress_label.setVisible(value)
         self.start_progress.setVisible(value)
     def update_progress(self, progress, max_progress, label):
         self.start_progress.setValue(progress)
         self.start_progress.setMaximum(max_progress)
         self.start_progress_label.setText(label) # Исправил проблему с созданием описания для полосы прогресса [24:01]
+    
+    def build_mod(self):
+        """Запускає сборку моду через build_and_deploy.py скрипт"""
+        try:
+            script_path = os.path.join(os.path.dirname(__file__), 'build_and_deploy.py')
+            if not os.path.exists(script_path):
+                QMessageBox.warning(self, 'Error', 'build_and_deploy.py not found!')
+                return
+            
+            # Запускаємо скрипт в окремому процесі
+            creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+            subprocess.Popen(
+                [sys.executable, script_path],
+                cwd=os.path.dirname(__file__),
+                creationflags=creationflags
+            )
+        except Exception as e:
+            QMessageBox.critical(self, 'Error', f'Failed to build mod: {e}')
+    
     def launch_game(self):
         version_id = self.version_select.currentData() or self.version_select.currentText()
         self.launch_thread.launch_setup_signal.emit(version_id, self.username.text())

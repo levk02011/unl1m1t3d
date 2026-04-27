@@ -86,9 +86,9 @@ public class AutoSellHandler {
             File file = new File(PRICES_FILE);
             if (file.exists()) {
                 try (FileReader reader = new FileReader(file)) {
-                    Map<String, Integer> loaded = GSON.fromJson(reader, Map.class);
+                    Map<String, ?> loaded = GSON.fromJson(reader, Map.class);
                     if (loaded != null) {
-                        for (Map.Entry<String, Object> entry : loaded.entrySet()) {
+                        for (Map.Entry<String, ?> entry : loaded.entrySet()) {
                             if (entry.getValue() instanceof Number) {
                                 priceCache.put(entry.getKey(), ((Number) entry.getValue()).intValue());
                             }
