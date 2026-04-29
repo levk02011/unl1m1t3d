@@ -96,23 +96,24 @@ public class Mod_1_21_4Client implements ClientModInitializer {
 
         // Реєстрація обробки чат-команд
         ClientSendMessageEvents.ALLOW_CHAT.register((message) -> {
-            // Перевіряємо, чи це команда нашого мода
-            if (ChatCommandHandler.handleChatCommand(message)) {
-                // Команда оброблена, не відправляємо її на сервер
-                return false;
+            // ГЛОБАЛЬНИЙ ЗАХИСТ: якщо текст починається з крапки, ми ЗАВЖДИ блокуємо його відправку.
+            if (message.trim().startsWith(".")) {
+                ChatCommandHandler.handleChatCommand(message);
+                return false; // false = скасувати відправку пакету на сервер
             }
-            // Дозволяємо стандартне повідомлення
             return true;
         });
-        
-        // Додаткова реєстрація для блокування команд у чаті
+
+        // Додаткова реєстрація для блокування команд у чаті (якщо гравець пише через скісну риску /)
         ClientSendMessageEvents.ALLOW_COMMAND.register((command) -> {
+            String lowerCmd = command.trim().toLowerCase();
+    
             // Блокуємо команди мода від відправки на сервер
-            if (command.startsWith("whyexit") || command.startsWith("chorpos1") || 
-                command.startsWith("chorpos2") || command.startsWith("an")) {
+            if (lowerCmd.startsWith("whyexit") || lowerCmd.startsWith("chorpos1") || 
+                lowerCmd.startsWith("chorpos2") || lowerCmd.startsWith("an")) {
                 // Обробляємо як чат-команду
-                ChatCommandHandler.handleChatCommand("." + command);
-                return false;
+                ChatCommandHandler.handleChatCommand("." + command.trim());
+                return false; // Блокуємо відправку на сервер
             }
             return true;
         });

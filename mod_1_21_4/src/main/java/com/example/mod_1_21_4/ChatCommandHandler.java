@@ -10,33 +10,48 @@ import net.minecraft.client.network.ClientPlayerEntity;
 public class ChatCommandHandler {
     
     public static boolean handleChatCommand(String message) {
-        // Нормалізуємо команду - замінюємо / на .
-        if (message.startsWith("/")) {
-            message = "." + message.substring(1);
+        // Нормалізуємо рядок: прибираємо пробіли по краях і робимо все маленькими літерами
+        String rawMessage = message.trim();
+        String lowerMessage = rawMessage.toLowerCase();
+    
+        // Замінюємо / на . для уніфікації
+        if (lowerMessage.startsWith("/")) {
+            lowerMessage = "." + lowerMessage.substring(1);
         }
-        
-        // Перевірка на .chorpos1 команду
-        if (message.startsWith(".chorpos1")) {
-            return handleChorpos1();
-        }
-        
-        // Перевірка на .chorpos2 команду
-        if (message.startsWith(".chorpos2")) {
-            return handleChorpos2();
-        }
-        
-        // Перевірка на .whyexit команду
-        if (message.startsWith(".whyexit")) {
+    
+    // Перевірка на .whyexit
+        if (lowerMessage.startsWith(".whyexit")) {
             return handleWhyexit();
         }
-        
-        // Перевірка на .an(число) команду
-        if (message.startsWith(".an")) {
-            return handleAnarchyNumber(message);
+    
+    // Перевірка на .chorpos1
+        if (lowerMessage.startsWith(".chorpos1")) {
+            return handleChorpos1();
         }
-        
-        return false;
+    
+    // Перевірка на .chorpos2
+        if (lowerMessage.startsWith(".chorpos2")) {
+            return handleChorpos2();
+        }
+    
+    // Перевірка на .an(число)
+        if (lowerMessage.startsWith(".an")) {
+        // Тут передаємо rawMessage, щоб зберегти форматування числа, якщо воно потрібне
+            return handleAnarchyNumber(rawMessage); 
+        }
+    
+    // ПАСТКА ДЛЯ ОПЕЧАТОК: Якщо команда починається з крапки, але ми її не знайшли
+        if (lowerMessage.startsWith(".")) {
+            ClientPlayerEntity player = MinecraftClient.getInstance().player;
+            if (player != null) {
+                player.sendMessage(Text.literal("§c[Unl1m1t3d] Невідома команда: " + rawMessage), false);
+            }
+        }
+        return true; 
     }
+    
+            return false;
+        }
     
     private static boolean handleChorpos1() {
         ClientPlayerEntity player = MinecraftClient.getInstance().player;
