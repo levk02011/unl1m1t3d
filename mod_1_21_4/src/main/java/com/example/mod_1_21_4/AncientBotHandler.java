@@ -14,635 +14,420 @@ import net.minecraft.world.World;
 import java.util.*;
 
 /**
- * Обробляє логіку Ancient Bot моду для автоматичного видобування давніх обломків
+ * AncientBot v2.0 - Hit & Run система для видобування ancient_debris
+ * Алгоритм: Сканування → Підготовка (баф) → Підрив → Евакуація → Повернення → Збір → Цикл
  */
 public class AncientBotHandler {
-    private static final int SEARCH_RADIUS = 17;
-    private static final int MAX_ERROR = 5;
-    private static final int NEARBY_PLAYER_RADIUS = 50;
-    private static final long POTION_DURATION_MS = 10000;
-    private static final long HUB_DELAY_MS = 5000;
+    private static final int SCAN_RADIUS = 17;
+    private static final int TOLERANCE = 5;
+    private static final long POTION_WARNING_TIME = 10000; // 10 сек перед кінцем
+    private static final long HUB_DELAY = 5000; // 5 сек очікування в хабі
+    private static final long PLAYER_PAUSE_TIME = 120000; // 2 хвилини паузи при виявленні гравця
     
-    private static State currentState = State.IDLE;
-    private static BlockPos targetCenter = null;
-    private static long potionStartTime = 0;
-    private static long stateStartTime = 0;
-    private static List<BlockPos> ancientDebrisLocations = new ArrayList<>();
-    private static int currentDebrisIndex = 0;
-    
-    // State for block analysis across multiple ticks
-    private static Map<BlockPos, Integer> blockDensity = new HashMap<>();
-    private static int analysisX = -SEARCH_RADIUS;
-    private static int analysisY = -SEARCH_RADIUS;
-    private static int analysisZ = -SEARCH_RADIUS;
-    private static boolean analysisComplete = false;
-    
-    // State for debris search across multiple ticks
-    private static int debrisSearchX = -50;
-    private static int debrisSearchZ = -50;
-    private static int debrisSearchY = 0;
-    private static boolean debrisSearchComplete = false;
-    
-    // State for pathfinding and block breaking
-    private static List<BlockPos> miningPath = new ArrayList<>();
-    private static int currentMiningIndex = 0;
-    private static long lastBreakTime = 0;
-    private static final long BREAK_DELAY = 50; // мс між ударами (більш швидко)
-    private static BlockPos currentlyMiningBlock = null;
-    private static int miningTicks = 0;
-    private static boolean breakingStarted = false;
-    
-    enum State {
-        IDLE, ANALYZING_BLOCKS, SELECTING_LOCATION, DRINKING_FIRE_RESISTANCE,
-        MOVING_TO_CENTER, PLACING_TNT, TNT_PLACED, GOING_TO_HUB,
-        WAITING_FOR_HUB_DELAY, EXECUTING_AN_COMMAND, SEARCHING_DEBRIS,
-        COLLECTING_DEBRIS, REPEATING_POTION, ERROR_HUB
+    enum BotState {
+        IDLE,                    // Неактивний
+        SCANNING,                // Сканування координат
+        MOVING_TO_BLAST_CENTER,  // Рух до центру підриву
+        BUFFING,                 // Пиття зілля
+        PLACING_EXPLOSIVE,       // Встановлення вибухівки
+        IGNITING,                // Запалення вибухівки
+        EVACUATING,              // Євакуація (/hub)
+        WAITING_IN_HUB,          // Очікування в хабі
+        RETURNING,               // Повернення на місце (/an)
+        SCANNING_DEBRIS,         // Сканування обломків
+        COLLECTING,              // Збір обломків
+        EMERGENCY_EXIT           // Аварійна євакуація
     }
+    
+    // === Стан боту ===
+    private static BotState currentState = BotState.IDLE;
+    private static long stateStartTime = 0;
+    private static long potionStartTime = 0;
+    private static long pauseStartTime = 0;
+    
+    // === Координати та маршрути ===
+    private static BlockPos blastCenter = null;
+    private static List<BlockPos> debrisLocations = new ArrayList<>();
+    private static List<BlockPos> collectionPath = new ArrayList<>();
+    private static int collectionIndex = 0;
+    
+    // === Сканування ===
+    private static int scanProgress = 0;
+    private static Map<BlockPos, Integer> blockDensityMap = new HashMap<>();
     
     public static void tick(MinecraftClient client) {
         ClientPlayerEntity player = client.player;
         if (player == null) return;
         
-        if (shouldReturnToHub(player)) {
-            returnToHub(player, "Помилка: невідповідні умови");
+        // Перевіра для аварійної евакуації
+        if (shouldEmergencyExit(player)) {
+            if (currentState != BotState.EMERGENCY_EXIT) {
+                emergencyExit(player, "Критична умова!");
+            }
             return;
         }
         
+        // Основна статус-машина
         switch (currentState) {
             case IDLE:
+                // Чекаємо на активацію
                 break;
-            case ANALYZING_BLOCKS:
-                analyzeNearbyBlocks(player);
+                
+            case SCANNING:
+                scanningTick(player);
                 break;
-            case SELECTING_LOCATION:
-                selectBestLocation(player);
+                
+            case MOVING_TO_BLAST_CENTER:
+                moveToBlastCenterTick(player);
                 break;
-            case DRINKING_FIRE_RESISTANCE:
-                drinkFireResistancePotion(player);
+                
+            case BUFFING:
+                bufferingTick(player);
                 break;
-            case MOVING_TO_CENTER:
-                moveToCenter(player);
+                
+            case PLACING_EXPLOSIVE:
+                placingExplosiveTick(player);
                 break;
-            case PLACING_TNT:
-                placeTNT(player);
+                
+            case IGNITING:
+                ignitingTick(player);
                 break;
-            case TNT_PLACED:
-                igniteAndGoToHub(player);
+                
+            case EVACUATING:
+                evacuatingTick(player);
                 break;
-            case GOING_TO_HUB:
-                executeCommand(player, "/hub");
-                currentState = State.WAITING_FOR_HUB_DELAY;
-                stateStartTime = System.currentTimeMillis();
+                
+            case WAITING_IN_HUB:
+                waitingInHubTick(player);
                 break;
-            case WAITING_FOR_HUB_DELAY:
-                if (System.currentTimeMillis() - stateStartTime >= HUB_DELAY_MS) {
-                    executeCommand(player, "/an(" + ModConfig.anarchyNumber + ")");
-                    currentState = State.SEARCHING_DEBRIS;
-                }
+                
+            case RETURNING:
+                returningTick(player);
                 break;
-            case SEARCHING_DEBRIS:
-                searchForAncientDebris(player);
+                
+            case SCANNING_DEBRIS:
+                scanningDebrisTick(player);
                 break;
-            case COLLECTING_DEBRIS:
-                collectDebris(player);
+                
+            case COLLECTING:
+                collectingTick(player);
                 break;
-            case REPEATING_POTION:
-                checkAndRepeatPotion(player);
-                break;
-            case ERROR_HUB:
-                returnToHub(player, "Помилка");
+                
+            case EMERGENCY_EXIT:
+                // Чекаємо на рішення гравця
                 break;
         }
     }
     
     public static void activate(ClientPlayerEntity player) {
-        if (currentState != State.IDLE) {
-            player.sendMessage(Text.literal("§cAncient Bot вже активований!"), false);
+        if (currentState != BotState.IDLE) {
+            player.sendMessage(Text.literal("§cAncient Bot вже активний!"), false);
             return;
         }
         
-        player.sendMessage(Text.literal("§a➤ Ancient Bot активований. Аналізую блоки..."), false);
-        currentState = State.ANALYZING_BLOCKS;
+        // Перевірка всіх необхідних ресурсів
+        cheker4ab.ResourceCheckResult checkResult = cheker4ab.checkAllResources(player);
+        
+        if (!checkResult.isAllAvailable()) {
+            player.sendMessage(Text.literal("§c⚠ БРАКУ РЕСУРСІВ!"), false);
+            cheker4ab.sendDetailedReport(player, checkResult);
+            return;
+        }
+        
+        player.sendMessage(Text.literal("§a➤ Ancient Bot активований. Починаю сканування..."), false);
+        
+        currentState = BotState.SCANNING;
         stateStartTime = System.currentTimeMillis();
-        ancientDebrisLocations.clear();
-        currentDebrisIndex = 0;
-        
-        // Reset analysis state
-        analysisX = -SEARCH_RADIUS;
-        analysisY = -SEARCH_RADIUS;
-        analysisZ = -SEARCH_RADIUS;
-        blockDensity.clear();
-        analysisComplete = false;
-        
-        // Reset debris search state
-        debrisSearchX = -50;
-        debrisSearchZ = -50;
-        debrisSearchY = 0;
-        debrisSearchComplete = false;
-        
-        // Reset mining state
-        miningPath.clear();
-        currentMiningIndex = 0;
-        lastBreakTime = 0;
-        currentlyMiningBlock = null;
-        miningTicks = 0;
-        breakingStarted = false;
+        blockDensityMap.clear();
+        scanProgress = 0;
+        blastCenter = null;
+        debrisLocations.clear();
+        collectionPath.clear();
+        collectionIndex = 0;
     }
     
     public static void deactivate(ClientPlayerEntity player) {
-        currentState = State.IDLE;
-        targetCenter = null;
+        currentState = BotState.IDLE;
+        stateStartTime = 0;
         potionStartTime = 0;
-        
-        // Reset analysis state
-        analysisX = -SEARCH_RADIUS;
-        analysisY = -SEARCH_RADIUS;
-        analysisZ = -SEARCH_RADIUS;
-        blockDensity.clear();
-        analysisComplete = false;
-        
-        // Reset debris search state
-        debrisSearchX = -50;
-        debrisSearchZ = -50;
-        debrisSearchY = 0;
-        debrisSearchComplete = false;
-        
-        // Reset mining state
-        miningPath.clear();
-        currentMiningIndex = 0;
-        lastBreakTime = 0;
-        currentlyMiningBlock = null;
-        miningTicks = 0;
-        breakingStarted = false;
+        pauseStartTime = 0;
+        blockDensityMap.clear();
+        debrisLocations.clear();
+        collectionPath.clear();
         
         player.sendMessage(Text.literal("§cAncient Bot деактивований."), false);
     }
     
-    private static int findInventorySlot(ClientPlayerEntity player, ItemStack target) {
-        for (int i = 0; i < player.getInventory().size(); i++) {
-            ItemStack stack = player.getInventory().getStack(i);
-            if (!stack.isEmpty() && stack.getItem() == target.getItem()) {
-                return i;
-            }
-        }
-        return -1;
-    }
+    // ==================== ФАЗА 1: СКАНУВАННЯ ====================
     
-    private static void analyzeNearbyBlocks(ClientPlayerEntity player) {
+    private static void scanningTick(ClientPlayerEntity player) {
         World world = player.getWorld();
         BlockPos playerPos = player.getBlockPos();
         
-        // Process one slice per tick to prevent freezing
-        if (analysisY > SEARCH_RADIUS) {
-            // Analysis complete
-            player.sendMessage(Text.literal("§a✓ Аналіз завершен. Знайдено " + blockDensity.size() + " кандидатів."), false);
-            
-            if (blockDensity.isEmpty()) {
-                player.sendMessage(Text.literal("§cПомилка: не знайдено блоків для аналізу!"), false);
-                currentState = State.ERROR_HUB;
-            } else {
-                currentState = State.SELECTING_LOCATION;
-            }
-            
-            // Reset analysis state
-            analysisX = -SEARCH_RADIUS;
-            analysisY = -SEARCH_RADIUS;
-            analysisZ = -SEARCH_RADIUS;
-            blockDensity.clear();
+        // Сканувати по одному Y-слою за тик
+        int y = -SCAN_RADIUS + scanProgress;
+        
+        if (y > SCAN_RADIUS) {
+            // Сканування завершено
+            selectBlastCenter(player);
             return;
         }
         
-        // Process one layer this tick
-        for (int x = -SEARCH_RADIUS; x <= SEARCH_RADIUS; x++) {
-            for (int z = -SEARCH_RADIUS; z <= SEARCH_RADIUS; z++) {
-                double dist = Math.sqrt(x*x + analysisY*analysisY + z*z);
-                if (dist <= SEARCH_RADIUS + MAX_ERROR) {
-                    BlockPos checkPos = playerPos.add(x, analysisY, z);
+        // Сканувати куб на висоті y
+        for (int x = -SCAN_RADIUS; x <= SCAN_RADIUS; x++) {
+            for (int z = -SCAN_RADIUS; z <= SCAN_RADIUS; z++) {
+                double dist = Math.sqrt(x*x + y*y + z*z);
+                
+                if (dist <= SCAN_RADIUS + TOLERANCE) {
+                    BlockPos checkPos = playerPos.add(x, y, z);
+                    
                     if (!world.getBlockState(checkPos).isAir()) {
+                        // Зберігати гріді 5x5x5
                         BlockPos gridPos = new BlockPos(
                             (checkPos.getX() / 5) * 5,
                             (checkPos.getY() / 5) * 5,
                             (checkPos.getZ() / 5) * 5
                         );
-                        blockDensity.put(gridPos, blockDensity.getOrDefault(gridPos, 0) + 1);
+                        blockDensityMap.put(gridPos, blockDensityMap.getOrDefault(gridPos, 0) + 1);
                     }
                 }
             }
         }
         
-        analysisY++;
+        scanProgress++;
     }
     
-    private static void selectBestLocation(ClientPlayerEntity player) {
-        World world = player.getWorld();
-        BlockPos playerPos = player.getBlockPos();
+    private static void selectBlastCenter(ClientPlayerEntity player) {
+        BlockPos best = null;
+        int maxDensity = 0;
         
-        BlockPos bestLocation = null;
-        int maxBlocks = 0;
-        
-        for (int x = -SEARCH_RADIUS; x <= SEARCH_RADIUS; x++) {
-            for (int y = -SEARCH_RADIUS; y <= SEARCH_RADIUS; y++) {
-                for (int z = -SEARCH_RADIUS; z <= SEARCH_RADIUS; z++) {
-                    double dist = Math.sqrt(x*x + y*y + z*z);
-                    if (dist <= SEARCH_RADIUS + MAX_ERROR) {
-                        BlockPos checkPos = playerPos.add(x, y, z);
-                        if (!world.getBlockState(checkPos).isAir()) {
-                            int blockCount = countBlocksInSphere(world, checkPos, 5);
-                            if (blockCount > maxBlocks) {
-                                maxBlocks = blockCount;
-                                bestLocation = checkPos;
-                            }
-                        }
-                    }
-                }
+        for (Map.Entry<BlockPos, Integer> entry : blockDensityMap.entrySet()) {
+            if (entry.getValue() > maxDensity) {
+                maxDensity = entry.getValue();
+                best = entry.getKey();
             }
         }
         
-        if (bestLocation != null) {
-            targetCenter = bestLocation;
+        if (best != null) {
+            blastCenter = best;
             player.sendMessage(
-                Text.literal("§a✓ Найкраще місце обрано: " + bestLocation.toShortString() + " (блоків: " + maxBlocks + ")"),
+                Text.literal("§a✓ Центр підриву обраний: " + best.toShortString() + " (щільність: " + maxDensity + ")"),
                 false
             );
-            currentState = State.DRINKING_FIRE_RESISTANCE;
+            
+            currentState = BotState.MOVING_TO_BLAST_CENTER;
+            stateStartTime = System.currentTimeMillis();
         } else {
-            player.sendMessage(Text.literal("§cПомилка: не знайдено подходящего місця!"), false);
-            currentState = State.ERROR_HUB;
+            player.sendMessage(Text.literal("§cПомилка: не знайдено подходящої точки!"), false);
+            currentState = BotState.IDLE;
         }
     }
     
-    private static int countBlocksInSphere(World world, BlockPos center, int radius) {
-        int count = 0;
-        for (int x = -radius; x <= radius; x++) {
-            for (int y = -radius; y <= radius; y++) {
-                for (int z = -radius; z <= radius; z++) {
-                    if (Math.sqrt(x*x + y*y + z*z) <= radius) {
-                        if (!world.getBlockState(center.add(x, y, z)).isAir()) {
-                            count++;
-                        }
-                    }
-                }
-            }
-        }
-        return count;
-    }
+    // ==================== ФАЗА 2: РУХ ДО ЦЕНТРУ ====================
     
-    private static void drinkFireResistancePotion(ClientPlayerEntity player) {
-        ItemStack fireResistancePotion = findPotionInInventory(player);
+    private static void moveToBlastCenterTick(ClientPlayerEntity player) {
+        if (blastCenter == null) return;
         
-        if (fireResistancePotion == null || fireResistancePotion.isEmpty()) {
-            player.sendMessage(Text.literal("§cПомилка: зілля вогнестійкості не знайдено!"), false);
-            currentState = State.ERROR_HUB;
+        Vec3d playerPos = player.getPos();
+        Vec3d targetPos = Vec3d.ofCenter(blastCenter);
+        double distance = playerPos.distanceTo(targetPos);
+        
+        if (distance < 1.5) {
+            // Прибули на місце
+            player.sendMessage(Text.literal("§a✓ Прибув до центру."), false);
+            currentState = BotState.BUFFING;
+            stateStartTime = System.currentTimeMillis();
             return;
         }
         
-        int slotIndex = findInventorySlot(player, fireResistancePotion);
-        if (slotIndex != -1) {
-            player.getInventory().selectedSlot = slotIndex;
-            // Почати пити зілля - установити активну руку
-            player.setCurrentHand(net.minecraft.util.Hand.MAIN_HAND);
+        // Рух до центру
+        Vec3d direction = targetPos.subtract(playerPos).normalize();
+        player.setVelocity(direction.multiply(0.15));
+        player.velocityDirty = true;
+    }
+    
+    // ==================== ФАЗА 3: БУФУВАННЯ (ЗІЛЛЯ) ====================
+    
+    private static void bufferingTick(ClientPlayerEntity player) {
+        // Перевірка наявності Fire Resistance
+        if (player.getStatusEffect(StatusEffects.FIRE_RESISTANCE) != null) {
+            // Вже є баф, переходимо далі
+            player.sendMessage(Text.literal("§a✓ Fire Resistance активний."), false);
+            currentState = BotState.PLACING_EXPLOSIVE;
+            stateStartTime = System.currentTimeMillis();
+            return;
         }
         
-        potionStartTime = System.currentTimeMillis();
-        player.sendMessage(Text.literal("§a✓ Зілля вогнестійкості випито."), false);
-        currentState = State.MOVING_TO_CENTER;
+        // Шукаємо зілля у інвентарі
+        ItemStack potion = findPotionInInventory(player);
+        if (potion == null || potion.isEmpty()) {
+            player.sendMessage(Text.literal("§c⚠ Fire Resistance зілля не знайдено!"), false);
+            emergencyExit(player, "Немає бафу");
+            return;
+        }
+        
+        // Пиємо зілля
+        int slot = findInventorySlot(player, potion);
+        if (slot != -1) {
+            player.getInventory().selectedSlot = slot;
+            player.setCurrentHand(net.minecraft.util.Hand.MAIN_HAND);
+            player.swingHand(net.minecraft.util.Hand.MAIN_HAND);
+            
+            potionStartTime = System.currentTimeMillis();
+            player.sendMessage(Text.literal("§6⚗ Випиваю Fire Resistance..."), false);
+        }
+    }
+    
+    // ==================== ФАЗА 4: ВСТАНОВЛЕННЯ ВИБУХІВКИ ====================
+    
+    private static void placingExplosiveTick(ClientPlayerEntity player) {
+        if (blastCenter == null) return;
+        
+        // Перевірка наявності вибухівки
+        ItemStack explosive = findExplosiveInInventory(player);
+        if (explosive == null || explosive.isEmpty()) {
+            player.sendMessage(Text.literal("§c⚠ Вибухівка не знайдена!"), false);
+            emergencyExit(player, "Немає боєприпасів");
+            return;
+        }
+        
+        // Встановлюємо вибухівку у центр
+        int slot = findInventorySlot(player, explosive);
+        if (slot != -1) {
+            player.getInventory().selectedSlot = slot;
+            
+            // Ставимо TNT у центр
+            net.minecraft.util.math.Direction direction = net.minecraft.util.math.Direction.UP;
+            Vec3d hitVec = Vec3d.ofCenter(blastCenter);
+            
+            MinecraftClient.getInstance().interactionManager.interactBlock(
+                player,
+                net.minecraft.util.Hand.MAIN_HAND,
+                new net.minecraft.util.hit.BlockHitResult(hitVec, direction, blastCenter, false)
+            );
+            
+            player.sendMessage(Text.literal("§6💣 Встановив вибухівку."), false);
+            currentState = BotState.IGNITING;
+            stateStartTime = System.currentTimeMillis();
+        }
+    }
+    
+    // ==================== ФАЗА 5: ЗАПАЛЕННЯ ====================
+    
+    private static void ignitingTick(ClientPlayerEntity player) {
+        // Перевірка наявності кресала
+        ItemStack flintAndSteel = findFlintAndSteelInInventory(player);
+        if (flintAndSteel == null || flintAndSteel.isEmpty() || flintAndSteel.isDamaged()) {
+            player.sendMessage(Text.literal("§c⚠ Кресало зламалось або відсутнє!"), false);
+            emergencyExit(player, "Зламалось кресало");
+            return;
+        }
+        
+        // Запалюємо
+        int slot = findInventorySlot(player, flintAndSteel);
+        if (slot != -1) {
+            player.getInventory().selectedSlot = slot;
+            
+            net.minecraft.util.math.Direction direction = net.minecraft.util.math.Direction.UP;
+            Vec3d hitVec = Vec3d.ofCenter(blastCenter);
+            
+            MinecraftClient.getInstance().interactionManager.interactBlock(
+                player,
+                net.minecraft.util.Hand.MAIN_HAND,
+                new net.minecraft.util.hit.BlockHitResult(hitVec, direction, blastCenter, false)
+            );
+            
+            player.sendMessage(Text.literal("§6🔥 Запалив вибухівку!"), false);
+            currentState = BotState.EVACUATING;
+            stateStartTime = System.currentTimeMillis();
+        }
+    }
+    
+    // ==================== ФАЗА 6: ЕВАКУАЦІЯ ====================
+    
+    private static void evacuatingTick(ClientPlayerEntity player) {
+        // Виконуємо /hub команду
+        player.networkHandler.sendChatCommand("hub");
+        player.sendMessage(Text.literal("§c🏃 ЕВАКУАЦІЯ!"), false);
+        
+        currentState = BotState.WAITING_IN_HUB;
         stateStartTime = System.currentTimeMillis();
     }
     
-    private static ItemStack findPotionInInventory(ClientPlayerEntity player) {
-        for (int i = 0; i < player.getInventory().size(); i++) {
-            ItemStack stack = player.getInventory().getStack(i);
-            if (stack.getItem() == Items.POTION) {
-                return stack;
-            }
-        }
-        return null;
-    }
+    // ==================== ФАЗА 7: ОЧІКУВАННЯ В ХАБІ ====================
     
-    private static void moveToCenter(ClientPlayerEntity player) {
-        if (targetCenter == null) return;
+    private static void waitingInHubTick(ClientPlayerEntity player) {
+        long elapsed = System.currentTimeMillis() - stateStartTime;
         
-        Vec3d targetVec = Vec3d.ofCenter(targetCenter);
-        Vec3d playerVec = player.getPos();
-        double dist = playerVec.distanceTo(targetVec);
-        
-        if (dist < 1.5) {
-            player.sendMessage(Text.literal("§a✓ Прибув в центр."), false);
-            currentState = State.PLACING_TNT;
-            miningPath.clear();
-            currentMiningIndex = 0;
-            currentlyMiningBlock = null;
-            miningTicks = 0;
-            breakingStarted = false;
-        } else {
-            // Build and execute mining path
-            if (miningPath.isEmpty()) {
-                buildMiningPath(player, targetVec);
-            }
+        if (elapsed >= HUB_DELAY) {
+            // Повертаємось
+            player.networkHandler.sendChatCommand("an(" + ModConfig.anarchyNumber + ")");
+            player.sendMessage(Text.literal("§a🔙 Повертаюсь на місце вибуху..."), false);
             
-            if (!miningPath.isEmpty()) {
-                mineThroughBlocks(player, targetVec);
-            }
+            currentState = BotState.RETURNING;
+            stateStartTime = System.currentTimeMillis();
         }
     }
     
-    private static void buildMiningPath(ClientPlayerEntity player, Vec3d targetVec) {
-        Vec3d playerVec = player.getPos();
+    // ==================== ФАЗА 8: ПОВЕРНЕННЯ ====================
+    
+    private static void returningTick(ClientPlayerEntity player) {
+        // Просто чекаємо, поки телепортація завершиться (~2-3 тика)
+        long elapsed = System.currentTimeMillis() - stateStartTime;
+        
+        if (elapsed >= 1000) { // 1 сек для телепортації
+            currentState = BotState.SCANNING_DEBRIS;
+            stateStartTime = System.currentTimeMillis();
+        }
+    }
+    
+    // ==================== ФАЗА 9: СКАНУВАННЯ ОБЛОМКІВ ====================
+    
+    private static void scanningDebrisTick(ClientPlayerEntity player) {
+        World world = player.getWorld();
         BlockPos playerPos = player.getBlockPos();
-        BlockPos targetPos = BlockPos.ofFloored(targetVec);
         
-        miningPath.clear();
+        debrisLocations.clear();
         
-        // Сканувати яких блоків треба копати на маршруті до центру
-        int steps = 20;
-        for (int i = 0; i <= steps; i++) {
-            double t = (double) i / steps;
-            Vec3d pointOnPath = playerVec.lerp(targetVec, t);
-            BlockPos checkPos = BlockPos.ofFloored(pointOnPath);
-            
-            // Перевірити куб 3x3x3 навколо маршруту
-            for (int dx = -1; dx <= 1; dx++) {
-                for (int dy = -1; dy <= 1; dy++) {
-                    for (int dz = -1; dz <= 1; dz++) {
-                        BlockPos blockToCheck = checkPos.add(dx, dy, dz);
-                        if (!player.getWorld().getBlockState(blockToCheck).isAir() &&
-                            !isSolidUnbreakable(player, blockToCheck)) {
-                            // Показати блок на карті (частинкою або лог)
-                            player.sendMessage(
-                                Text.literal("§6[Копання] Блок на: " + blockToCheck.toShortString()),
-                                true // Actionbar - миготить повідомлення
-                            );
-                            miningPath.add(blockToCheck);
+        // Шукаємо всі ancient_debris у радіусі 50 блоків
+        for (int x = -50; x <= 50; x++) {
+            for (int z = -50; z <= 50; z++) {
+                for (int y = 0; y < 256; y++) {
+                    BlockPos checkPos = playerPos.add(x, y, z);
+                    
+                    if (world.getBlockState(checkPos).getBlock() == Blocks.ANCIENT_DEBRIS) {
+                        // Перевірка, чи блок видно
+                        if (isExposedBlock(world, checkPos)) {
+                            debrisLocations.add(checkPos);
                         }
                     }
                 }
             }
         }
         
-        // Видалити дублікати
-        List<BlockPos> uniquePath = new ArrayList<>();
-        for (BlockPos pos : miningPath) {
-            if (!uniquePath.contains(pos)) {
-                uniquePath.add(pos);
-            }
-        }
-        miningPath = uniquePath;
-        
-        if (!miningPath.isEmpty()) {
-            player.sendMessage(Text.literal("§e→ Знайдено " + miningPath.size() + " блоків для копання"), false);
-        }
-    }
-    
-    private static void mineThroughBlocks(ClientPlayerEntity player, Vec3d targetVec) {
-        if (currentMiningIndex >= miningPath.size()) {
-            currentMiningIndex = 0;
-            miningPath.clear();
-            currentlyMiningBlock = null;
-            miningTicks = 0;
-            breakingStarted = false;
-            
-            // Продовжити рух до центру
-            Vec3d playerVec = player.getPos();
-            Vec3d direction = targetVec.subtract(playerVec).normalize();
-            double moveSpeed = 0.08;
-            player.setVelocity(direction.multiply(moveSpeed));
-            return;
-        }
-        
-        BlockPos targetBlock = miningPath.get(currentMiningIndex);
-        World world = player.getWorld();
-        
-        // Перевірити, чи блок вже розбитий
-        if (world.getBlockState(targetBlock).isAir()) {
-            currentMiningIndex++;
-            currentlyMiningBlock = null;
-            miningTicks = 0;
-            breakingStarted = false;
-            return;
-        }
-        
-        // Якщо це новий блок, почати копати його
-        if (!targetBlock.equals(currentlyMiningBlock)) {
-            currentlyMiningBlock = targetBlock;
-            miningTicks = 0;
-            breakingStarted = false;
-        }
-        
-        // Вибрати кайл з інвентарю
-        selectPickaxeInInventory(player);
-        
-        // Визначити напрямок для атаки
-        net.minecraft.util.math.Direction breakDirection = getBreakDirection(player.getBlockPos(), targetBlock);
-        
-        // Почати копання (перший раз)
-        if (!breakingStarted) {
-            MinecraftClient.getInstance().interactionManager.attackBlock(targetBlock, breakDirection);
-            breakingStarted = true;
-        }
-        
-        // Постійно копати блок кілька тиків
-        player.swingHand(net.minecraft.util.Hand.MAIN_HAND);
-        miningTicks++;
-        
-        // Показати гравцю, який блок копаємо (actionbar)
-        player.sendMessage(
-            Text.literal("§c⛏ Копаю: " + targetBlock.toShortString() + " [" + (currentMiningIndex + 1) + "/" + miningPath.size() + "] (" + miningTicks + " тиків)"),
-            true
-        );
-        
-        // Спробувати розбити блок після достатньої кількості тиків
-        // У Hard difficulty с железным киркой ~7-8 тиков для камня
-        if (miningTicks >= 30) {
-            // Завершити копання через breakBlock
-            MinecraftClient.getInstance().interactionManager.breakBlock(targetBlock);
-            currentMiningIndex++;
-            currentlyMiningBlock = null;
-            miningTicks = 0;
-            breakingStarted = false;
-        }
-    }
-    
-    private static net.minecraft.util.math.Direction getBreakDirection(BlockPos fromPos, BlockPos targetPos) {
-        int dx = Integer.compare(targetPos.getX(), fromPos.getX());
-        int dy = Integer.compare(targetPos.getY(), fromPos.getY());
-        int dz = Integer.compare(targetPos.getZ(), fromPos.getZ());
-        
-        if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > Math.abs(dz)) {
-            return dy > 0 ? net.minecraft.util.math.Direction.UP : net.minecraft.util.math.Direction.DOWN;
-        } else if (Math.abs(dz) > Math.abs(dx)) {
-            return dz > 0 ? net.minecraft.util.math.Direction.SOUTH : net.minecraft.util.math.Direction.NORTH;
+        if (debrisLocations.isEmpty()) {
+            player.sendMessage(Text.literal("§6✓ Всі обломки зібрані! Перезапускаю..."), false);
+            currentState = BotState.SCANNING;
+            stateStartTime = System.currentTimeMillis();
+            blockDensityMap.clear();
+            scanProgress = 0;
         } else {
-            return dx > 0 ? net.minecraft.util.math.Direction.EAST : net.minecraft.util.math.Direction.WEST;
-        }
-    }
-    
-    private static void selectPickaxeInInventory(ClientPlayerEntity player) {
-        for (int i = 0; i < player.getInventory().size(); i++) {
-            ItemStack stack = player.getInventory().getStack(i);
-            if (stack.getItem() instanceof net.minecraft.item.PickaxeItem) {
-                player.getInventory().selectedSlot = i;
-                return;
-            }
-        }
-    }
-    
-    private static boolean isSolidUnbreakable(ClientPlayerEntity player, BlockPos pos) {
-        World world = player.getWorld();
-        net.minecraft.block.Block block = world.getBlockState(pos).getBlock();
-        
-        // Блоки, які не можна копати
-        return block == Blocks.BEDROCK || 
-               block == Blocks.OBSIDIAN;
-    }
-    
-    private static void breakBlocksInDirection(ClientPlayerEntity player, Vec3d targetVec) {
-        Vec3d playerVec = player.getPos();
-        Vec3d direction = targetVec.subtract(playerVec).normalize();
-        
-        // Check and break blocks in a 3x3x3 cube in front of the player
-        for (double offset = 0.5; offset <= 3.0; offset += 0.5) {
-            Vec3d checkVec = playerVec.add(direction.multiply(offset));
-            BlockPos checkPos = BlockPos.ofFloored(checkVec);
-            
-            World world = player.getWorld();
-            if (!world.getBlockState(checkPos).isAir()) {
-                // Try to break the block
-                MinecraftClient.getInstance().interactionManager.attackBlock(checkPos, net.minecraft.util.math.Direction.UP);
-            }
-        }
-    }
-    
-    private static void placeTNT(ClientPlayerEntity player) {
-        if (targetCenter == null) return;
-        
-        ItemStack tnt = findTNTInInventory(player);
-        
-        if (tnt == null || tnt.isEmpty()) {
-            player.sendMessage(Text.literal("§cПомилка: TNT не знайдено!"), false);
-            currentState = State.ERROR_HUB;
-            return;
-        }
-        
-        int slotIndex = findInventorySlot(player, tnt);
-        if (slotIndex != -1) {
-            player.getInventory().selectedSlot = slotIndex;
-            
-            // Постави TNT в центрі - взаємодія з блоком під центром
-            BlockPos placePos = targetCenter.down();
-            net.minecraft.util.math.Direction direction = net.minecraft.util.math.Direction.UP;
-            Vec3d hitVec = Vec3d.ofCenter(placePos).add(0, 1, 0);
-            
-            // Клікнути правою кнопкою на блок, щоб поставити TNT
-            MinecraftClient.getInstance().interactionManager.interactBlock(
-                player,
-                net.minecraft.util.Hand.MAIN_HAND,
-                new net.minecraft.util.hit.BlockHitResult(hitVec, direction, placePos, false)
+            // Сортуємо по відстані
+            debrisLocations.sort((a, b) -> 
+                Double.compare(a.getSquaredDistance(playerPos), b.getSquaredDistance(playerPos))
             );
-            player.swingHand(net.minecraft.util.Hand.MAIN_HAND);
-        }
-        
-        player.sendMessage(Text.literal("§a✓ TNT розміщено в центрі."), false);
-        currentState = State.TNT_PLACED;
-    }
-    
-    private static ItemStack findTNTInInventory(ClientPlayerEntity player) {
-        for (int i = 0; i < player.getInventory().size(); i++) {
-            ItemStack stack = player.getInventory().getStack(i);
-            if (stack.getItem() == Items.TNT) {
-                return stack;
-            }
-        }
-        return null;
-    }
-    
-    private static void igniteAndGoToHub(ClientPlayerEntity player) {
-        ItemStack flintAndSteel = findFlintAndSteelInInventory(player);
-        
-        if (flintAndSteel == null || flintAndSteel.isEmpty()) {
-            player.sendMessage(Text.literal("§cПомилка: кресало не знайдено!"), false);
-            currentState = State.ERROR_HUB;
-            return;
-        }
-        
-        int slotIndex = findInventorySlot(player, flintAndSteel);
-        if (slotIndex != -1) {
-            player.getInventory().selectedSlot = slotIndex;
             
-            // Поджечь TNT - взаємодія з TNT блоком
-            net.minecraft.util.math.Direction direction = net.minecraft.util.math.Direction.UP;
-            Vec3d hitVec = Vec3d.ofCenter(targetCenter).add(0, 0.5, 0);
+            // Обчислюємо TSP маршрут
+            collectionPath = calculateTSPPath(debrisLocations);
+            collectionIndex = 0;
             
-            // Клікнути правою кнопкою на TNT, щоб його запалити
-            MinecraftClient.getInstance().interactionManager.interactBlock(
-                player,
-                net.minecraft.util.Hand.MAIN_HAND,
-                new net.minecraft.util.hit.BlockHitResult(hitVec, direction, targetCenter, false)
+            player.sendMessage(
+                Text.literal("§a✓ Знайдено " + debrisLocations.size() + " обломків. Збираю..."),
+                false
             );
-            player.swingHand(net.minecraft.util.Hand.MAIN_HAND);
-        }
-        
-        player.sendMessage(Text.literal("§a✓ TNT розпалено!"), false);
-        currentState = State.GOING_TO_HUB;
-    }
-    
-    private static ItemStack findFlintAndSteelInInventory(ClientPlayerEntity player) {
-        for (int i = 0; i < player.getInventory().size(); i++) {
-            ItemStack stack = player.getInventory().getStack(i);
-            if (stack.getItem() == Items.FLINT_AND_STEEL) {
-                return stack;
-            }
-        }
-        return null;
-    }
-    
-    private static void searchForAncientDebris(ClientPlayerEntity player) {
-        World world = player.getWorld();
-        BlockPos playerPos = player.getBlockPos();
-        
-        // Reset on first call
-        if (debrisSearchX == -50 && debrisSearchZ == -50 && debrisSearchY == 0) {
-            ancientDebrisLocations.clear();
-        }
-        
-        // Search one X-column per tick to prevent lag (50 block search radius)
-        int searchLimit = 50;
-        
-        for (int z = -searchLimit; z <= searchLimit; z++) {
-            for (int y = 0; y < 256; y++) {
-                BlockPos checkPos = new BlockPos(playerPos.getX() + debrisSearchX, y, playerPos.getZ() + z);
-                if (world.getBlockState(checkPos).getBlock() == Blocks.ANCIENT_DEBRIS) {
-                    if (isExposedBlock(world, checkPos)) {
-                        ancientDebrisLocations.add(checkPos);
-                    }
-                }
-            }
-        }
-        
-        debrisSearchX++;
-        
-        // Search complete when we've covered the radius
-        if (debrisSearchX > searchLimit) {
-            if (ancientDebrisLocations.isEmpty()) {
-                player.sendMessage(Text.literal("§cДавні обломки не знайдені. Шукаю нове місце для підриву..."), false);
-                currentState = State.ANALYZING_BLOCKS;
-            } else {
-                ancientDebrisLocations.sort((a, b) -> 
-                    Double.compare(a.getSquaredDistance(playerPos), b.getSquaredDistance(playerPos))
-                );
-                
-                player.sendMessage(
-                    Text.literal("§a✓ Знайдено " + ancientDebrisLocations.size() + " древніх обломків."),
-                    false
-                );
-                
-                currentDebrisIndex = 0;
-                currentState = State.COLLECTING_DEBRIS;
-            }
             
-            // Reset search state
-            debrisSearchX = -searchLimit;
-            debrisSearchZ = -searchLimit;
-            debrisSearchY = 0;
+            currentState = BotState.COLLECTING;
+            stateStartTime = System.currentTimeMillis();
         }
     }
     
@@ -665,116 +450,178 @@ public class AncientBotHandler {
         return false;
     }
     
-    private static void collectDebris(ClientPlayerEntity player) {
-        if (currentDebrisIndex >= ancientDebrisLocations.size()) {
-            player.sendMessage(Text.literal("§a✓ Всі давні обломки зібрані!"), false);
-            currentState = State.ANALYZING_BLOCKS;
-            miningPath.clear();
-            currentMiningIndex = 0;
-            currentlyMiningBlock = null;
-            miningTicks = 0;
-            breakingStarted = false;
+    // ==================== ФАЗА 10: ЗБІР ОБЛОМКІВ ====================
+    
+    private static void collectingTick(ClientPlayerEntity player) {
+        if (collectionIndex >= collectionPath.size()) {
+            // Збір завершен, скануємо знову
+            player.sendMessage(Text.literal("§6✓ Цикл завершен. Сканую нове місце..."), false);
+            currentState = BotState.SCANNING;
+            stateStartTime = System.currentTimeMillis();
+            blockDensityMap.clear();
+            scanProgress = 0;
             return;
         }
         
-        BlockPos target = ancientDebrisLocations.get(currentDebrisIndex);
+        BlockPos target = collectionPath.get(collectionIndex);
         Vec3d targetVec = Vec3d.ofCenter(target);
         Vec3d playerVec = player.getPos();
-        double dist = playerVec.distanceTo(targetVec);
+        double distance = playerVec.distanceTo(targetVec);
         
-        if (dist < 1.5) {
-            player.sendMessage(Text.literal("§6Збираю обломок " + (currentDebrisIndex + 1) + "/" + ancientDebrisLocations.size()), false);
-            currentDebrisIndex++;
-            miningPath.clear();
-            currentMiningIndex = 0;
-            currentlyMiningBlock = null;
-            miningTicks = 0;
-            breakingStarted = false;
-        } else {
-            // Build and execute mining path
-            if (miningPath.isEmpty()) {
-                buildMiningPath(player, targetVec);
-            }
+        if (distance < 1.5) {
+            // Прибули до блоку, розбиваємо його
+            net.minecraft.util.math.Direction direction = net.minecraft.util.math.Direction.UP;
+            MinecraftClient.getInstance().interactionManager.attackBlock(target, direction);
+            player.swingHand(net.minecraft.util.Hand.MAIN_HAND);
             
-            if (!miningPath.isEmpty()) {
-                mineThroughBlocks(player, targetVec);
-            }
-        }
-        
-        checkAndRepeatPotion(player);
-    }
-    
-    private static void checkAndRepeatPotion(ClientPlayerEntity player) {
-        long elapsed = System.currentTimeMillis() - potionStartTime;
-        long timeRemaining = 180000 - elapsed;
-        
-        if (timeRemaining <= POTION_DURATION_MS && timeRemaining > 0) {
-            if (currentState == State.COLLECTING_DEBRIS) {
-                drinkFireResistancePotion(player);
-            }
+            collectionIndex++;
+        } else {
+            // Рухаємось до блоку
+            Vec3d direction = targetVec.subtract(playerVec).normalize();
+            player.setVelocity(direction.multiply(0.15));
+            player.velocityDirty = true;
         }
     }
     
-    private static void executeCommand(ClientPlayerEntity player, String command) {
-        player.networkHandler.sendChatCommand(command.substring(1));
-        player.sendMessage(Text.literal("§6Команда: " + command), false);
-    }
+    // ==================== УТИЛІТИ ====================
     
-    private static boolean shouldReturnToHub(ClientPlayerEntity player) {
-        if (player.getStatusEffect(StatusEffects.FIRE_RESISTANCE) == null && 
-            currentState != State.IDLE && currentState != State.ANALYZING_BLOCKS && 
-            currentState != State.GOING_TO_HUB && currentState != State.WAITING_FOR_HUB_DELAY) {
-            return true;
-        }
-        
-        if (!hasPickaxeInInventory(player) && currentState == State.COLLECTING_DEBRIS) {
-            return true;
-        }
-        
-        ItemStack flintAndSteel = findFlintAndSteelInInventory(player);
-        if ((flintAndSteel == null || flintAndSteel.isDamaged()) && currentState == State.TNT_PLACED) {
-            return true;
-        }
-        
-        if (findTNTInInventory(player) == null && currentState == State.PLACING_TNT) {
-            return true;
-        }
-        
-        if (isPlayerNearby(player, NEARBY_PLAYER_RADIUS) && currentState != State.IDLE) {
-            if (System.currentTimeMillis() - stateStartTime > 120000) {
-                executeCommand(player, "/an(" + ModConfig.anarchyNumber + ")");
-            }
-            return true;
-        }
-        
-        return false;
-    }
-    
-    private static boolean hasPickaxeInInventory(ClientPlayerEntity player) {
+    private static ItemStack findPotionInInventory(ClientPlayerEntity player) {
         for (int i = 0; i < player.getInventory().size(); i++) {
             ItemStack stack = player.getInventory().getStack(i);
-            if (stack.getItem() instanceof net.minecraft.item.PickaxeItem) {
+            if (stack.getItem() == Items.POTION) {
+                return stack;
+            }
+        }
+        return null;
+    }
+    
+    private static ItemStack findExplosiveInInventory(ClientPlayerEntity player) {
+        // Шукаємо TNT, ліжка, або інші вибухівки
+        for (int i = 0; i < player.getInventory().size(); i++) {
+            ItemStack stack = player.getInventory().getStack(i);
+            if (stack.getItem() == Items.TNT) {
+                return stack;
+            }
+        }
+        return null;
+    }
+    
+    private static ItemStack findFlintAndSteelInInventory(ClientPlayerEntity player) {
+        for (int i = 0; i < player.getInventory().size(); i++) {
+            ItemStack stack = player.getInventory().getStack(i);
+            if (stack.getItem() == Items.FLINT_AND_STEEL) {
+                return stack;
+            }
+        }
+        return null;
+    }
+    
+    private static int findInventorySlot(ClientPlayerEntity player, ItemStack target) {
+        for (int i = 0; i < player.getInventory().size(); i++) {
+            ItemStack stack = player.getInventory().getStack(i);
+            if (!stack.isEmpty() && stack.getItem() == target.getItem()) {
+                return i;
+            }
+        }
+        return -1;
+    }
+    
+    private static List<BlockPos> calculateTSPPath(List<BlockPos> debris) {
+        // Простий жадібний алгоритм (not perfect TSP, но швидко)
+        List<BlockPos> path = new ArrayList<>();
+        Set<Integer> visited = new HashSet<>();
+        
+        if (debris.isEmpty()) return path;
+        
+        // Почати з першого
+        int current = 0;
+        path.add(debris.get(current));
+        visited.add(current);
+        
+        // Жадібно додавати найближчий
+        while (visited.size() < debris.size()) {
+            BlockPos currentPos = debris.get(current);
+            int nearest = -1;
+            double minDist = Double.MAX_VALUE;
+            
+            for (int i = 0; i < debris.size(); i++) {
+                if (!visited.contains(i)) {
+                    double dist = currentPos.getSquaredDistance(debris.get(i));
+                    if (dist < minDist) {
+                        minDist = dist;
+                        nearest = i;
+                    }
+                }
+            }
+            
+            if (nearest != -1) {
+                path.add(debris.get(nearest));
+                visited.add(nearest);
+                current = nearest;
+            }
+        }
+        
+        return path;
+    }
+    
+    // ==================== ЗАХИСНІ ТРИГЕРИ ====================
+    
+    private static boolean shouldEmergencyExit(ClientPlayerEntity player) {
+        // Умова 1: Немає Fire Resistance
+        if (player.getStatusEffect(StatusEffects.FIRE_RESISTANCE) == null &&
+            currentState != BotState.IDLE &&
+            currentState != BotState.SCANNING &&
+            currentState != BotState.EVACUATING &&
+            currentState != BotState.WAITING_IN_HUB) {
+            return true;
+        }
+        
+        // Умова 2: Зламалось кресало
+        if (currentState == BotState.IGNITING) {
+            ItemStack fs = findFlintAndSteelInInventory(player);
+            if (fs == null || fs.isDamaged()) {
                 return true;
             }
         }
+        
+        // Умова 3: Немає кирки
+        if (currentState == BotState.COLLECTING) {
+            boolean hasPickaxe = false;
+            for (int i = 0; i < player.getInventory().size(); i++) {
+                if (player.getInventory().getStack(i).getItem() instanceof net.minecraft.item.PickaxeItem) {
+                    hasPickaxe = true;
+                    break;
+                }
+            }
+            if (!hasPickaxe) {
+                return true;
+            }
+        }
+        
+        // Умова 4: Немає вибухівки
+        if (currentState == BotState.PLACING_EXPLOSIVE) {
+            if (findExplosiveInInventory(player) == null) {
+                return true;
+            }
+        }
+        
         return false;
     }
     
-    private static boolean isPlayerNearby(ClientPlayerEntity player, int radius) {
-        return false;
-    }
-    
-    private static void returnToHub(ClientPlayerEntity player, String reason) {
-        player.sendMessage(Text.literal("§c" + reason + " - повертаюсь у /hub"), false);
-        executeCommand(player, "/hub");
-        currentState = State.IDLE;
+    private static void emergencyExit(ClientPlayerEntity player, String reason) {
+        currentState = BotState.EMERGENCY_EXIT;
+        player.networkHandler.sendChatCommand("hub");
+        player.sendMessage(Text.literal("§c🚨 АВАРІЙНА ЕВАКУАЦІЯ: " + reason), false);
+        
+        // Пауза на 2 хвилини
+        pauseStartTime = System.currentTimeMillis();
     }
     
     public static boolean isActive() {
-        return currentState != State.IDLE;
+        return currentState != BotState.IDLE && currentState != BotState.EMERGENCY_EXIT;
     }
     
-    public static State getCurrentState() {
+    public static BotState getCurrentState() {
         return currentState;
     }
 }

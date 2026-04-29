@@ -14,7 +14,6 @@ import org.lwjgl.glfw.GLFW;
 
 public class Mod_1_21_4Client implements ClientModInitializer {
     private static KeyBinding keyBinding;
-    private static boolean lastKeyState = false;
 
     static boolean autoWardenEnabled;
     static boolean ancientBotEnabled;
@@ -39,27 +38,37 @@ public class Mod_1_21_4Client implements ClientModInitializer {
     private static boolean lastAutoEatKeyState = false;
     private static boolean lastAutoInvisKeyState = false;
     private static boolean lastAutoSellKeyState = false;
+    
+    // Для контролю відкриття меню
+    private static boolean lastMenuKeyState = false;
 
     @Override
     public void onInitializeClient() {
         // Register the key binding
         keyBinding = KeyBindingHelper.registerKeyBinding(new KeyBinding(
-            "key.mod_1_21_4.open_menu", // The translation key of the keybinding's name
-            InputUtil.Type.KEYSYM, // The type of the keybinding, KEYSYM for keyboard, MOUSE for mouse.
-            GLFW.GLFW_KEY_RIGHT_SHIFT, // The keycode of the key
-            "category.mod_1_21_4" // The translation key of the keybinding's category.
+            "key.mod_1_21_4.open_menu",
+            InputUtil.Type.KEYSYM,
+            GLFW.GLFW_KEY_RIGHT_SHIFT,
+            "category.mod_1_21_4"
         ));
 
-        // Register the event to check for key presses
+        // Register the event to check for key presses using direct window input
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            if (client != null && client.currentScreen == null) {
-                boolean currentKeyState = keyBinding.isPressed();
-                if (currentKeyState && !lastKeyState) {
-                    openMenu(client);
+            if (client != null && client.currentScreen == null && client.player != null) {
+                long window = client.getWindow().getHandle();
+                
+                // Прямо перевіряємо натиск Right Shift
+                boolean currentMenuKeyState = InputUtil.isKeyPressed(window, GLFW.GLFW_KEY_RIGHT_SHIFT);
+                
+                // Відкрити меню коли клавіша щойно натиснена
+                if (currentMenuKeyState && !lastMenuKeyState) {
+                    Screen menuScreen = new MenuScreen(Text.literal("Mod Menu"));
+                    client.setScreen(menuScreen);
                 }
-                lastKeyState = currentKeyState;
+                
+                lastMenuKeyState = currentMenuKeyState;
             } else {
-                lastKeyState = false;
+                lastMenuKeyState = false;
             }
         });
 
@@ -95,12 +104,6 @@ public class Mod_1_21_4Client implements ClientModInitializer {
             // Дозволяємо стандартне повідомлення
             return true;
         });
-    }
-
-    private void openMenu(MinecraftClient client) {
-        // Create a simple screen with a menu
-        Screen menuScreen = new MenuScreen(Text.literal("Mod Menu"));
-        client.setScreen(menuScreen);
     }
 
     private void checkFunctionBinds(MinecraftClient client) {

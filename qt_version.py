@@ -383,16 +383,11 @@ class MainWindow(QMainWindow):
         self.start_progress.setProperty('value', 24)
         self.start_progress.setVisible(False)
         
-        self.build_button = QPushButton(self.centralwidget)
-        self.build_button.setText('🔨 Build Mod')
-        self.build_button.clicked.connect(self.build_mod)
-        
         self.start_button = QPushButton(self.centralwidget)
         self.start_button.setText('Play')
         self.start_button.clicked.connect(self.launch_game)
         
         self.buttons_layout = QHBoxLayout()
-        self.buttons_layout.addWidget(self.build_button)
         self.buttons_layout.addWidget(self.start_button)
         
         self.vertical_layout = QVBoxLayout(self.centralwidget)
@@ -414,7 +409,6 @@ class MainWindow(QMainWindow):
     
     def state_update(self, value):
         self.start_button.setDisabled(value)
-        self.build_button.setDisabled(value)
         self.start_progress_label.setVisible(value)
         self.start_progress.setVisible(value)
     def update_progress(self, progress, max_progress, label):
@@ -441,6 +435,9 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, 'Error', f'Failed to build mod: {e}')
     
     def launch_game(self):
+        # Build mod first before launching
+        self.build_mod()
+        
         version_id = self.version_select.currentData() or self.version_select.currentText()
         self.launch_thread.launch_setup_signal.emit(version_id, self.username.text())
         self.launch_thread.start()
