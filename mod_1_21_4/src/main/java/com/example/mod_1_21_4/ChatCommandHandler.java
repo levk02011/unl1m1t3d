@@ -10,6 +10,11 @@ import net.minecraft.client.network.ClientPlayerEntity;
 public class ChatCommandHandler {
     
     public static boolean handleChatCommand(String message) {
+        // Нормалізуємо команду - замінюємо / на .
+        if (message.startsWith("/")) {
+            message = "." + message.substring(1);
+        }
+        
         // Перевірка на .chorpos1 команду
         if (message.startsWith(".chorpos1")) {
             return handleChorpos1();
@@ -18,6 +23,11 @@ public class ChatCommandHandler {
         // Перевірка на .chorpos2 команду
         if (message.startsWith(".chorpos2")) {
             return handleChorpos2();
+        }
+        
+        // Перевірка на .whyexit команду
+        if (message.startsWith(".whyexit")) {
+            return handleWhyexit();
         }
         
         // Перевірка на .an(число) команду
@@ -98,6 +108,16 @@ public class ChatCommandHandler {
                 );
                 return true;
             }
+        }
+        return false;
+    }
+    
+    private static boolean handleWhyexit() {
+        ClientPlayerEntity player = MinecraftClient.getInstance().player;
+        if (player != null) {
+            // Викликаємо метод whyexit з AncientBotHandler
+            AncientBotHandler.whyexit(player);
+            return true;
         }
         return false;
     }

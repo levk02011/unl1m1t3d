@@ -104,6 +104,18 @@ public class Mod_1_21_4Client implements ClientModInitializer {
             // Дозволяємо стандартне повідомлення
             return true;
         });
+        
+        // Додаткова реєстрація для блокування команд у чаті
+        ClientSendMessageEvents.ALLOW_COMMAND.register((command) -> {
+            // Блокуємо команди мода від відправки на сервер
+            if (command.startsWith("whyexit") || command.startsWith("chorpos1") || 
+                command.startsWith("chorpos2") || command.startsWith("an")) {
+                // Обробляємо як чат-команду
+                ChatCommandHandler.handleChatCommand("." + command);
+                return false;
+            }
+            return true;
+        });
     }
 
     private void checkFunctionBinds(MinecraftClient client) {

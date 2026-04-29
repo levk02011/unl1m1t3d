@@ -54,13 +54,13 @@ public class AutoSellHandler {
     private static void executeAhSell(ClientPlayerEntity player, String itemName, int price, int count) {
         int totalPrice = price * count;
         String command = "/ah sell " + totalPrice;
-        player.networkHandler.sendChatCommand(command.substring(1));
+        player.networkHandler.sendCommand(command.substring(1));
         player.sendMessage(Text.literal("§e[Auto Sell] Продаю: " + itemName + " × " + count + " за " + totalPrice), false);
     }
 
     private static void executeAhSearch(ClientPlayerEntity player, String itemName) {
         String command = "/ah search " + itemName;
-        player.networkHandler.sendChatCommand(command.substring(1));
+        player.networkHandler.sendCommand(command.substring(1));
         player.sendMessage(Text.literal("§6[Auto Sell] Шукаю ціну для: " + itemName), false);
     }
 

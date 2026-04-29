@@ -45,6 +45,11 @@ public class AncientBotHandler {
     private static long potionStartTime = 0;
     private static long pauseStartTime = 0;
     
+    // === Евакуація - причини та інформація ===
+    private static String lastExitReason = "Невідомо";
+    private static long lastExitTime = 0;
+    private static BotState lastExitState = BotState.IDLE;
+    
     // === Координати та маршрути ===
     private static BlockPos blastCenter = null;
     private static List<BlockPos> debrisLocations = new ArrayList<>();
@@ -346,8 +351,13 @@ public class AncientBotHandler {
     // ==================== ФАЗА 6: ЕВАКУАЦІЯ ====================
     
     private static void evacuatingTick(ClientPlayerEntity player) {
+        // Зберігаємо інформацію про евакуацію
+        lastExitReason = "Нормальна евакуація після підриву";
+        lastExitTime = System.currentTimeMillis();
+        lastExitState = BotState.EVACUATING;
+        
         // Виконуємо /hub команду
-        player.networkHandler.sendChatCommand("hub");
+        player.networkHandler.sendCommand("hub");
         player.sendMessage(Text.literal("§c🏃 ЕВАКУАЦІЯ!"), false);
         
         currentState = BotState.WAITING_IN_HUB;
@@ -361,7 +371,7 @@ public class AncientBotHandler {
         
         if (elapsed >= HUB_DELAY) {
             // Повертаємось
-            player.networkHandler.sendChatCommand("an(" + ModConfig.anarchyNumber + ")");
+            player.networkHandler.sendCommand("an " + ModConfig.anarchyNumber);
             player.sendMessage(Text.literal("§a🔙 Повертаюсь на місце вибуху..."), false);
             
             currentState = BotState.RETURNING;
@@ -609,8 +619,13 @@ public class AncientBotHandler {
     }
     
     private static void emergencyExit(ClientPlayerEntity player, String reason) {
+        // Зберігаємо інформацію про евакуацію
+        lastExitReason = reason;
+        lastExitTime = System.currentTimeMillis();
+        lastExitState = currentState;
+        
         currentState = BotState.EMERGENCY_EXIT;
-        player.networkHandler.sendChatCommand("hub");
+        player.networkHandler.sendCommand("hub");
         player.sendMessage(Text.literal("§c🚨 АВАРІЙНА ЕВАКУАЦІЯ: " + reason), false);
         
         // Пауза на 2 хвилини
@@ -623,5 +638,42 @@ public class AncientBotHandler {
     
     public static BotState getCurrentState() {
         return currentState;
+    }
+    
+    /**
+     * Показує інформацію про останню евакуацію
+     */
+    public static void whyexit(ClientPlayerEntity player) {
+        if (lastExitTime == 0) {
+            player.sendMessage(Text.literal("§6Немає інформації про евакуацію"), false);
+            return;
+        }
+        
+        // Форматуємо час
+        long timeSinceExit = System.currentTimeMillis() - lastExitTime;
+        String timeStr = formatTime(timeSinceExit);
+        
+        // Виводимо детальну інформацію
+        player.sendMessage(Text.literal("§6=== ІНФОРМАЦІЯ ПРО ОСТАННЮ ЕВАКУАЦІЮ ==="), false);
+        player.sendMessage(Text.literal("§aPричина: §f" + lastExitReason), false);
+        player.sendMessage(Text.literal("§aЗ якого стану: §f" + lastExitState.toString()), false);
+        player.sendMessage(Text.literal("§aЧас назад: §f" + timeStr), false);
+        player.sendMessage(Text.literal("§6===================================="), false);
+    }
+    
+    /**
+     * Форматує час в читаний вигляд
+     */
+    private static String formatTime(long milliseconds) {
+        long seconds = milliseconds / 1000;
+        if (seconds < 60) {
+            return seconds + " сек назад";
+        } else if (seconds < 3600) {
+            long minutes = seconds / 60;
+            return minutes + " хв назад";
+        } else {
+            long hours = seconds / 3600;
+            return hours + " год назад";
+        }
     }
 }
