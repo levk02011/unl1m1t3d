@@ -29,3 +29,4 @@ public class ModConfig {
     public static Position chorusPos1 = new Position();
     public static Position chorusPos2 = new Position();
     public static int anarchyNumber = 1;
+}

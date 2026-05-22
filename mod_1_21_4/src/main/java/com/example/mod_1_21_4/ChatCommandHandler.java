@@ -50,9 +50,6 @@ public class ChatCommandHandler {
         return true; 
     }
     
-            return false;
-        }
-    
     private static boolean handleChorpos1() {
         ClientPlayerEntity player = MinecraftClient.getInstance().player;
         if (player != null) {

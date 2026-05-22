@@ -51,22 +51,22 @@ public class AncientBotHandler {
         // Перевірка на критичні умови (евакуація)
         if (shouldEmergencyExit(player)) {
             if (currentState != BotState.EMERGENCY_EXIT) {
-                emergencyExit(player, "Критична умова (відсутність бафу/ресурсів)");[cite: 12]
+                emergencyExit(player, "Критична умова (відсутність бафу/ресурсів)");
             }
             return;
         }
         
         switch (currentState) {
             case SCANNING -> scanningTick(player);
-            case MOVING_TO_BLAST_CENTER -> moveToBlastCenterTick(player);[cite: 12]
-            case BUFFING -> buffingTick(player);[cite: 12]
+            case MOVING_TO_BLAST_CENTER -> moveToBlastCenterTick(player);
+            case BUFFING -> buffingTick(player);
             case PLACING_EXPLOSIVE -> placingExplosiveTick(player);
             case IGNITING -> ignitingTick(player);
             case EVACUATING -> evacuatingTick(player);
             case WAITING_IN_HUB -> waitingInHubTick(player);
             case RETURNING -> returningTick(player);
             case SCANNING_DEBRIS -> scanningDebrisTick(player);
-            case COLLECTING -> collectingTick(player);[cite: 12]
+            case COLLECTING -> collectingTick(player);
             default -> {}
         }
     }
@@ -77,47 +77,47 @@ public class AncientBotHandler {
         if (blastCenter == null) return;
     
         Vec3d targetPos = Vec3d.ofCenter(blastCenter);
-        double distanceSq = player.getPos().squaredDistanceTo(targetPos);[cite: 12]
+        double distanceSq = player.getPos().squaredDistanceTo(targetPos);
 
-        if (distanceSq < 0.7) { // Радіус зупинки[cite: 12]
-            stopMovement();[cite: 12]
+        if (distanceSq < 0.7) { // Радіус зупинки
+            stopMovement();
             player.sendMessage(Text.literal("§a✓ На місці. Готуюсь до підриву."), false);
             currentState = BotState.BUFFING;
             stateStartTime = System.currentTimeMillis();
             return;
         }
     
-        lookAt(targetPos);[cite: 12]
+        lookAt(targetPos);
         
         // Пробиваємо шлях, якщо попереду блоки
-        BlockPos headPos = player.getBlockPos().offset(player.getHorizontalFacing());[cite: 12]
-        if (!player.getWorld().getBlockState(headPos).isAir() && !player.getWorld().getBlockState(headPos).isOf(Blocks.BEDROCK)) {[cite: 12]
-            MinecraftClient.getInstance().interactionManager.attackBlock(headPos, Direction.UP);[cite: 12]
-            player.swingHand(Hand.MAIN_HAND);[cite: 12]
+        BlockPos headPos = player.getBlockPos().offset(player.getHorizontalFacing());
+        if (!player.getWorld().getBlockState(headPos).isAir() && !player.getWorld().getBlockState(headPos).isOf(Blocks.BEDROCK)) {
+            MinecraftClient.getInstance().interactionManager.attackBlock(headPos, Direction.UP);
+            player.swingHand(Hand.MAIN_HAND);
         }
     
-        MinecraftClient.getInstance().options.forwardKey.setPressed(true);[cite: 12]
+        MinecraftClient.getInstance().options.forwardKey.setPressed(true);
     }
 
     private static void buffingTick(ClientPlayerEntity player) {
-        if (player.getStatusEffect(StatusEffects.FIRE_RESISTANCE) != null) {[cite: 12]
+        if (player.getStatusEffect(StatusEffects.FIRE_RESISTANCE) != null) {
             currentState = BotState.PLACING_EXPLOSIVE;
             stateStartTime = System.currentTimeMillis();
             return;
         }
         
         long elapsed = System.currentTimeMillis() - stateStartTime;
-        if (elapsed > 1000 && elapsed < 4000) { // Затримка на пиття[cite: 12]
-            ItemStack potion = findPotionInInventory(player);[cite: 12]
+        if (elapsed > 1000 && elapsed < 4000) { // Затримка на пиття
+            ItemStack potion = findPotionInInventory(player);
             if (potion != null) {
-                int slot = findInventorySlot(player, potion);[cite: 12]
+                int slot = findInventorySlot(player, potion);
                 if (slot != -1) {
-                    player.getInventory().selectedSlot = slot;[cite: 12]
-                    MinecraftClient.getInstance().options.useKey.setPressed(true);[cite: 12]
+                    player.getInventory().selectedSlot = slot;
+                    MinecraftClient.getInstance().options.useKey.setPressed(true);
                 }
             }
         } else if (elapsed >= 4000) {
-            MinecraftClient.getInstance().options.useKey.setPressed(false);[cite: 12]
+            MinecraftClient.getInstance().options.useKey.setPressed(false);
         }
     }
 
@@ -130,24 +130,24 @@ public class AncientBotHandler {
     
         BlockPos target = collectionPath.get(collectionIndex);
         Vec3d targetVec = Vec3d.ofCenter(target);
-        double distanceSq = player.getPos().squaredDistanceTo(targetVec);[cite: 12]
+        double distanceSq = player.getPos().squaredDistanceTo(targetVec);
     
-        if (distanceSq < 4.5) {[cite: 12]
-            stopMovement();[cite: 12]
-            lookAt(targetVec);[cite: 12]
-            MinecraftClient.getInstance().interactionManager.attackBlock(target, Direction.UP);[cite: 12]
-            player.swingHand(Hand.MAIN_HAND);[cite: 12]
+        if (distanceSq < 4.5) {
+            stopMovement();
+            lookAt(targetVec);
+            MinecraftClient.getInstance().interactionManager.attackBlock(target, Direction.UP);
+            player.swingHand(Hand.MAIN_HAND);
             
-            if (player.getWorld().getBlockState(target).isAir()) collectionIndex++;[cite: 12]
+            if (player.getWorld().getBlockState(target).isAir()) collectionIndex++;
         } else {
-            lookAt(targetVec);[cite: 12]
-            MinecraftClient.getInstance().options.forwardKey.setPressed(true);[cite: 12]
+            lookAt(targetVec);
+            MinecraftClient.getInstance().options.forwardKey.setPressed(true);
         }
     }
 
     // ==================== ДОПОМІЖНІ МЕТОДИ ====================
 
-    private static void lookAt(Vec3d target) {[cite: 12]
+    private static void lookAt(Vec3d target) {
         ClientPlayerEntity player = MinecraftClient.getInstance().player;
         if (player == null) return;
         double diffX = target.x - player.getX();
@@ -156,28 +156,28 @@ public class AncientBotHandler {
         double diffXZ = Math.sqrt(diffX * diffX + diffZ * diffZ);
         float yaw = (float) Math.toDegrees(Math.atan2(diffZ, diffX)) - 90.0F;
         float pitch = (float) -Math.toDegrees(Math.atan2(diffY, diffXZ));
-        player.setYaw(yaw);[cite: 12]
-        player.setPitch(pitch);[cite: 12]
+        player.setYaw(yaw);
+        player.setPitch(pitch);
     }
 
-    private static void stopMovement() {[cite: 12]
-        MinecraftClient.getInstance().options.forwardKey.setPressed(false);[cite: 12]
+    private static void stopMovement() {
+        MinecraftClient.getInstance().options.forwardKey.setPressed(false);
         if (MinecraftClient.getInstance().player != null) {
             Vec3d v = MinecraftClient.getInstance().player.getVelocity();
-            MinecraftClient.getInstance().player.setVelocity(0, v.y, 0);[cite: 12]
+            MinecraftClient.getInstance().player.setVelocity(0, v.y, 0);
         }
     }
 
     private static boolean shouldEmergencyExit(ClientPlayerEntity player) {
-        // Додано стани, в яких відсутність ефекту — це нормально[cite: 12]
+        // Додано стани, в яких відсутність ефекту — це нормально
         if (player.getStatusEffect(StatusEffects.FIRE_RESISTANCE) == null &&
             currentState != BotState.IDLE &&
             currentState != BotState.SCANNING &&
-            currentState != BotState.MOVING_TO_BLAST_CENTER &&[cite: 12]
-            currentState != BotState.BUFFING &&[cite: 12]
+            currentState != BotState.MOVING_TO_BLAST_CENTER &&
+            currentState != BotState.BUFFING &&
             currentState != BotState.EVACUATING &&
             currentState != BotState.WAITING_IN_HUB &&
-            currentState != BotState.RETURNING) {[cite: 12]
+            currentState != BotState.RETURNING) {
             return true;
         }
         return false;
@@ -206,7 +206,7 @@ public class AncientBotHandler {
                 .map(Map.Entry::getKey).orElse(null);
         if (best != null) {
             blastCenter = best;
-            currentState = BotState.MOVING_TO_BLAST_CENTER;[cite: 12]
+            currentState = BotState.MOVING_TO_BLAST_CENTER;
         } else { currentState = BotState.IDLE; }
     }
 
@@ -262,7 +262,7 @@ public class AncientBotHandler {
         else {
             collectionPath = new ArrayList<>(debrisLocations);
             collectionIndex = 0;
-            currentState = BotState.COLLECTING;[cite: 12]
+            currentState = BotState.COLLECTING;
         }
     }
 
@@ -285,5 +285,39 @@ public class AncientBotHandler {
             if (player.getInventory().getStack(i).getItem() == target.getItem()) return i;
         }
         return -1;
+    }
+
+    public static void activate(ClientPlayerEntity player) {
+        if (currentState == BotState.IDLE) {
+            currentState = BotState.SCANNING;
+            stateStartTime = System.currentTimeMillis();
+            lastExitReason = "Невідомо";
+            scanProgress = 0;
+            blockDensityMap.clear();
+            debrisLocations.clear();
+            collectionPath.clear();
+            collectionIndex = 0;
+            blastCenter = null;
+            player.sendMessage(Text.literal("§a[AncientBot] Активовано!"), false);
+        }
+    }
+
+    public static void deactivate(ClientPlayerEntity player) {
+        if (currentState != BotState.IDLE) {
+            lastExitState = currentState;
+            lastExitTime = System.currentTimeMillis();
+            lastExitReason = "Деактивовано користувачем";
+            currentState = BotState.IDLE;
+            stopMovement();
+            player.sendMessage(Text.literal("§c[AncientBot] Деактивовано!"), false);
+        }
+    }
+
+    public static void whyexit(ClientPlayerEntity player) {
+        player.sendMessage(Text.literal("§e[AncientBot] Остання причина виходу: " + lastExitReason), false);
+        if (lastExitTime > 0) {
+            long ago = (System.currentTimeMillis() - lastExitTime) / 1000;
+            player.sendMessage(Text.literal("§e[AncientBot] " + ago + " секунд тому"), false);
+        }
     }
 }
