@@ -4,22 +4,73 @@
 		{
 			"label": "build mod",
 			"type": "shell",
-			"command": "gradlew.bat"
+			"command": ".\\gradlew.bat",
+			"args": ["build", "--stacktrace"],
+			"group": "build",
+			"problemMatcher": ["$gradle"],
+			"options": {
+				"env": {
+					"JAVA_HOME": "C:\\Program Files\\Java\\jdk-21.0.11",
+					"PATH": "${env:PATH};C:\\Program Files\\Java\\jdk-21.0.11\\bin"
+				}
+			},
+			"presentation": {
+				"reveal": "always"
+			}
 		},
 		{
-			"label": "build mod",
+			"label": "copy mod to minecraft",
 			"type": "shell",
-			"command": "gradlew.bat"
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"$jarFile = Get-ChildItem -Path '.\\build\\libs\\' -Filter '*.jar' -Name | Where-Object { $_ -match 'mod_1_21_4.*\\.jar$' } | Select-Object -First 1; if ($jarFile) { Copy-Item -Path \".\\build\\libs\\$jarFile\" -Destination '..\\minecraft\\mods\\' -Force; Write-Host 'Мод скопійований: '$jarFile } else { Write-Warning 'JAR файл не знайдений' }"
+			],
+			"dependsOn": ["build mod"],
+			"presentation": {
+				"reveal": "always"
+			}
 		},
 		{
-			"label": "build mod",
+			"label": "run game",
 			"type": "shell",
-			"command": ".\\gradlew.bat"
+			"command": "..\\fabric_start.bat",
+			"dependsOn": ["copy mod to minecraft"],
+			"presentation": {
+				"reveal": "always"
+			},
+			"group": {
+				"kind": "test",
+				"isDefault": true
+			}
 		},
 		{
-			"label": "build mod",
+			"label": "build mod (watch)",
 			"type": "shell",
-			"command": ".\\gradlew.bat"
+			"command": ".\\gradlew.bat",
+			"args": ["build", "--continuous"],
+			"group": "build",
+			"options": {
+				"env": {
+					"JAVA_HOME": "C:\\Program Files\\Java\\jdk-21.0.11",
+					"PATH": "${env:PATH};C:\\Program Files\\Java\\jdk-21.0.11\\bin"
+				}
+			},
+			"isBackground": true,
+			"problemMatcher": {
+				"pattern": {
+					"regexp": "^.*?(ERROR).*?$",
+					"file": 1,
+					"location": 2,
+					"message": 3
+				},
+				"background": {
+					"activeOnStart": true,
+					"beginsPattern": "^.*?:compileJava$",
+					"endsPattern": "^.*?BUILD (SUCCESS|FAILED).*?$"
+				}
+			}
 		}
 	]
 }

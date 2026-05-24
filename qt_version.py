@@ -417,26 +417,87 @@ class MainWindow(QMainWindow):
         self.start_progress_label.setText(label) # Исправил проблему с созданием описания для полосы прогресса [24:01]
     
     def build_mod(self):
-        """Запускає сборку моду через build_and_deploy.py скрипт"""
+        """Компілює мод через gradle синхронно перед запуском гри"""
         try:
-            script_path = os.path.join(os.path.dirname(__file__), 'build_and_deploy.py')
-            if not os.path.exists(script_path):
-                QMessageBox.warning(self, 'Error', 'build_and_deploy.py not found!')
-                return
+            mod_dir = os.path.join(os.path.dirname(__file__), 'mod_1_21_4')
+            if not os.path.exists(mod_dir):
+                QMessageBox.warning(self, 'Error', 'mod_1_21_4 directory not found!')
+                return False
             
-            # Запускаємо скрипт в окремому процесі
+            gradlew = os.path.join(mod_dir, 'gradlew.bat')
+            if not os.path.exists(gradlew):
+                QMessageBox.warning(self, 'Error', 'gradlew.bat not found in mod_1_21_4!')
+                return False
+            
+            self.update_progress_label('Building mod...')
+            self.start_progress.setVisible(True)
+            self.start_progress_label.setVisible(True)
+            self.start_button.setEnabled(False)
+            
+            # Налаштування оточення з Java 21
+            env = os.environ.copy()
+            env['JAVA_HOME'] = r'C:\Program Files\Java\jdk-21.0.11'
+            env['PATH'] = env.get('PATH', '') + ';' + r'C:\Program Files\Java\jdk-21.0.11\bin'
+            
+            # Запускаємо gradle build синхронно
             creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-            subprocess.Popen(
-                [sys.executable, script_path],
-                cwd=os.path.dirname(__file__),
-                creationflags=creationflags
+            result = subprocess.run(
+                [gradlew, 'build', '--stacktrace'],
+                cwd=mod_dir,
+                creationflags=creationflags,
+                capture_output=True,
+                text=True,
+                env=env
             )
+            
+            if result.returncode != 0:
+                QMessageBox.critical(self, 'Build Failed', f'Mod build failed:\n{result.stderr}')
+                self.start_button.setEnabled(True)
+                self.start_progress.setVisible(False)
+                self.start_progress_label.setVisible(False)
+                return False
+            
+            # Знаходимо jar файл
+            libs_dir = os.path.join(mod_dir, 'build', 'libs')
+            jar_files = [f for f in os.listdir(libs_dir) if f.endswith('.jar') and 'mod_1_21_4' in f]
+            
+            if not jar_files:
+                QMessageBox.warning(self, 'Error', 'No JAR file found in build/libs!')
+                self.start_button.setEnabled(True)
+                self.start_progress.setVisible(False)
+                self.start_progress_label.setVisible(False)
+                return False
+            
+            # Копіюємо jar в папку модів
+            mods_dir = os.path.join(os.path.dirname(__file__), 'minecraft', 'mods')
+            os.makedirs(mods_dir, exist_ok=True)
+            
+            src_jar = os.path.join(libs_dir, jar_files[0])
+            dst_jar = os.path.join(mods_dir, jar_files[0])
+            
+            if os.path.exists(dst_jar):
+                os.remove(dst_jar)
+            shutil.copy2(src_jar, dst_jar)
+            
+            self.update_progress_label('Mod built and deployed!')
+            return True
+            
         except Exception as e:
             QMessageBox.critical(self, 'Error', f'Failed to build mod: {e}')
+            self.start_button.setEnabled(True)
+            self.start_progress.setVisible(False)
+            self.start_progress_label.setVisible(False)
+            return False
+    
+    def update_progress_label(self, text):
+        """Оновлює текст прогресу в UI"""
+        self.start_progress_label.setText(text)
+        QApplication.processEvents()
     
     def launch_game(self):
         # Build mod first before launching
-        self.build_mod()
+        if not self.build_mod():
+            return
         
         version_id = self.version_select.currentData() or self.version_select.currentText()
         self.launch_thread.launch_setup_signal.emit(version_id, self.username.text())
