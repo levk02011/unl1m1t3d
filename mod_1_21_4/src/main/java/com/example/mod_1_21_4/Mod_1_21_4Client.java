@@ -22,6 +22,8 @@ public class Mod_1_21_4Client implements ClientModInitializer {
     static boolean autoEatEnabled;
     static boolean autoInvisEnabled;
     static boolean autoSellEnabled;
+    static boolean netherWartFarmEnabled;
+    static boolean funPayEnabled;
 
     static int keyAutoWarden = GLFW.GLFW_KEY_UNKNOWN;
     static int keyAncientBot = GLFW.GLFW_KEY_UNKNOWN;
@@ -30,6 +32,8 @@ public class Mod_1_21_4Client implements ClientModInitializer {
     static int keyAutoEat = GLFW.GLFW_KEY_UNKNOWN;
     static int keyAutoInvis = GLFW.GLFW_KEY_UNKNOWN;
     static int keyAutoSell = GLFW.GLFW_KEY_UNKNOWN;
+    static int keyNetherWartFarm = GLFW.GLFW_KEY_UNKNOWN;
+    static int keyFunPay = GLFW.GLFW_KEY_UNKNOWN;
 
     private static boolean lastAutoWardenKeyState = false;
     private static boolean lastAncientBotKeyState = false;
@@ -38,6 +42,8 @@ public class Mod_1_21_4Client implements ClientModInitializer {
     private static boolean lastAutoEatKeyState = false;
     private static boolean lastAutoInvisKeyState = false;
     private static boolean lastAutoSellKeyState = false;
+    private static boolean lastNetherWartFarmKeyState = false;
+    private static boolean lastFunPayKeyState = false;
     
     // Для контролю відкриття меню
     private static boolean lastMenuKeyState = false;
@@ -139,6 +145,8 @@ public class Mod_1_21_4Client implements ClientModInitializer {
         lastAutoEatKeyState = tickBind(window, keyAutoEat, lastAutoEatKeyState, () -> autoEatEnabled = !autoEatEnabled);
         lastAutoInvisKeyState = tickBind(window, keyAutoInvis, lastAutoInvisKeyState, () -> autoInvisEnabled = !autoInvisEnabled);
         lastAutoSellKeyState = tickBind(window, keyAutoSell, lastAutoSellKeyState, () -> autoSellEnabled = !autoSellEnabled);
+        lastNetherWartFarmKeyState = tickBind(window, keyNetherWartFarm, lastNetherWartFarmKeyState, () -> netherWartFarmEnabled = !netherWartFarmEnabled);
+        lastFunPayKeyState = tickBind(window, keyFunPay, lastFunPayKeyState, () -> funPayEnabled = !funPayEnabled);
     }
 
     private boolean tickBind(long window, int keyCode, boolean lastState, Runnable action) {
@@ -161,6 +169,8 @@ public class Mod_1_21_4Client implements ClientModInitializer {
             case "auto eat" -> keyAutoEat = keyCode;
             case "auto invis" -> keyAutoInvis = keyCode;
             case "auto sell" -> keyAutoSell = keyCode;
+            case "nether wart farm" -> keyNetherWartFarm = keyCode;
+            case "fun pay" -> keyFunPay = keyCode;
         }
     }
 
@@ -174,6 +184,8 @@ public class Mod_1_21_4Client implements ClientModInitializer {
             case "auto eat" -> keyCode = keyAutoEat;
             case "auto invis" -> keyCode = keyAutoInvis;
             case "auto sell" -> keyCode = keyAutoSell;
+            case "nether wart farm" -> keyCode = keyNetherWartFarm;
+            case "fun pay" -> keyCode = keyFunPay;
             default -> keyCode = GLFW.GLFW_KEY_UNKNOWN;
         }
         if (keyCode == GLFW.GLFW_KEY_UNKNOWN) {

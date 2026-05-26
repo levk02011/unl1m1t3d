@@ -342,6 +342,21 @@ class MainWindow(QMainWindow):
 
         # Create menu bar
         self.menubar = self.menuBar()
+        
+        # Mod menu
+        self.mod_menu = self.menubar.addMenu('Mod')
+        
+        # Functions submenu
+        self.functions_menu = self.mod_menu.addMenu('Functions')
+        self.nether_wart_farm_action = QAction('NetherWartFarm', self)
+        self.nether_wart_farm_action.triggered.connect(self.launch_nether_wart_farm)
+        self.functions_menu.addAction(self.nether_wart_farm_action)
+        
+        # FunPay menu item
+        self.funpay_action = QAction('FunPay', self)
+        self.mod_menu.addAction(self.funpay_action)
+        
+        # About menu
         self.about_menu = self.menubar.addMenu('About')
         self.about_us_action = QAction('About Us', self)
         self.about_us_action.triggered.connect(self.show_about_us)
@@ -519,6 +534,10 @@ class MainWindow(QMainWindow):
         <p>For more information, visit our website or check the project repository.</p>
         """
         QMessageBox.about(self, "About Unl1m1t3d Launcher", about_text)
+
+    def launch_nether_wart_farm(self):
+        """Launch the NetherWartFarm function"""
+        QMessageBox.information(self, "NetherWartFarm", "NetherWartFarm function is under development.")
 
 if __name__ == '__main__':
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling, True)

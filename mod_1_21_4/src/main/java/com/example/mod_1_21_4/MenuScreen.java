@@ -98,6 +98,16 @@ public class MenuScreen extends Screen {
                 Mod_1_21_4Client.autoSellEnabled = !Mod_1_21_4Client.autoSellEnabled;
                 init();
             }).dimensions(extraColumnX, startY + (buttonHeight + spacing) * 2, buttonWidth, buttonHeight).build());
+
+            this.addDrawableChild(ButtonWidget.builder(Text.literal(toggleLabel("nether wart farm", Mod_1_21_4Client.netherWartFarmEnabled)), button -> {
+                Mod_1_21_4Client.netherWartFarmEnabled = !Mod_1_21_4Client.netherWartFarmEnabled;
+                init();
+            }).dimensions(pveColumnX, startY + (buttonHeight + spacing) * 4, buttonWidth, buttonHeight).build());
+
+            this.addDrawableChild(ButtonWidget.builder(Text.literal(toggleLabel("fun pay", Mod_1_21_4Client.funPayEnabled)), button -> {
+                Mod_1_21_4Client.funPayEnabled = !Mod_1_21_4Client.funPayEnabled;
+                init();
+            }).dimensions(pveColumnX, startY + (buttonHeight + spacing) * 5, buttonWidth, buttonHeight).build());
         } else if (selectedSection == 1) {
             this.addDrawableChild(ButtonWidget.builder(Text.literal(getBindButtonLabel("auto warden")), button -> {
                 capturingBindFunction = "auto warden";
@@ -133,6 +143,16 @@ public class MenuScreen extends Screen {
                 capturingBindFunction = "auto sell";
                 init();
             }).dimensions(extraColumnX, startY + (buttonHeight + spacing) * 2, buttonWidth, buttonHeight).build());
+
+            this.addDrawableChild(ButtonWidget.builder(Text.literal(getBindButtonLabel("nether wart farm")), button -> {
+                capturingBindFunction = "nether wart farm";
+                init();
+            }).dimensions(pveColumnX, startY + (buttonHeight + spacing) * 4, buttonWidth, buttonHeight).build());
+
+            this.addDrawableChild(ButtonWidget.builder(Text.literal(getBindButtonLabel("fun pay")), button -> {
+                capturingBindFunction = "fun pay";
+                init();
+            }).dimensions(pveColumnX, startY + (buttonHeight + spacing) * 5, buttonWidth, buttonHeight).build());
         } else {
             // About Us section - display info from launcher
             this.addDrawableChild(ButtonWidget.builder(Text.literal("Back"), button -> {
@@ -191,8 +211,10 @@ public class MenuScreen extends Screen {
             context.drawTextWithShadow(this.textRenderer, "- Chorus Auto Farm", textX + 10, textY + lineHeight * 9, color);
             context.drawTextWithShadow(this.textRenderer, "- Auto Eat & Invis", textX + 10, textY + lineHeight * 10, color);
             context.drawTextWithShadow(this.textRenderer, "- Auto Sell Support", textX + 10, textY + lineHeight * 11, color);
+            context.drawTextWithShadow(this.textRenderer, "- NetherWartFarm", textX + 10, textY + lineHeight * 12, color);
+            context.drawTextWithShadow(this.textRenderer, "- FunPay", textX + 10, textY + lineHeight * 13, color);
             
-            context.drawTextWithShadow(this.textRenderer, "Developed by: Unl1m1t3d Team", textX, textY + lineHeight * 13, color);
+            context.drawTextWithShadow(this.textRenderer, "Developed by: Unl1m1t3d Team", textX, textY + lineHeight * 15, color);
         }
     }
 
