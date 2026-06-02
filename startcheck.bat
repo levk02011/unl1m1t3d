@@ -67,7 +67,11 @@ echo.
 echo [*] Налаштування середовища...
 
 REM Тимчасово оновлюємо PATH для поточної сесії
-set "PATH=%PATH%;C:\Program Files\Java\jdk-21\bin;C:\Program Files\Python312\;C:\Program Files\Python312\Scripts\;%USERPROFILE%\AppData\Local\Programs\Python\Python312\;%USERPROFILE%\AppData\Local\Programs\Python\Python312\Scripts\"
+set "PATH=%PATH%;C:\Program Files\Java\jdk-21.0.11\bin;C:\Program Files\Java\jdk-21\bin;C:\Program Files\Python312\;C:\Program Files\Python312\Scripts\;%USERPROFILE%\AppData\Local\Programs\Python\Python312\;%USERPROFILE%\AppData\Local\Programs\Python\Python312\Scripts\"
+set "JAVA_HOME=C:\Program Files\Java\jdk-21.0.11"
+
+echo [*] JAVA_HOME встановлено: %JAVA_HOME%
+echo [*] PATH оновлено
 
 REM Визначаємо точний шлях до робочого файлу python.exe
 set "FINAL_PYTHON="
@@ -167,8 +171,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
     "  Invoke-WebRequest -Uri $url -OutFile $output -UseBasicParsing; " ^
     "  Write-Host '[✓] JDK 21 завантажено'; " ^
     "  Write-Host '[*] Запуск установника Java (тиха інсталяція)...'; " ^
-    "  Start-Process -FilePath $output -ArgumentList '/s' -Wait; " ^
+    "  $installArgs = '/s INSTALLDIR=C:\Program Files\Java\jdk-21'; " ^
+    "  Start-Process -FilePath $output -ArgumentList $installArgs -Wait; " ^
     "  Write-Host '[✓] JDK 21 встановлена'; " ^
+    "  Write-Host '[*] Встановлюю JAVA_HOME у системну змінну оточення...'; " ^
+    "  [Environment]::SetEnvironmentVariable('JAVA_HOME', 'C:\Program Files\Java\jdk-21', 'Machine'); " ^
+    "  [Environment]::SetEnvironmentVariable('PATH', [Environment]::GetEnvironmentVariable('PATH', 'Machine') + ';C:\Program Files\Java\jdk-21\bin', 'Machine'); " ^
+    "  Write-Host '[✓] JAVA_HOME та PATH встановлені'; " ^
     "} catch { " ^
     "  Write-Host '[✗] Помилка завантаження JDK: ' + $_.Exception.Message; " ^
     "}"

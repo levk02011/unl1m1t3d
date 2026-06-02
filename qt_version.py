@@ -9,10 +9,7 @@ from uuid import uuid1
 
 # Імпорти PyQt5
 from PyQt5.QtCore import QThread, pyqtSignal, QSize, Qt
-from PyQt5.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit, 
-                             QComboBox, QSpacerItem, QSizePolicy, QProgressBar, 
-                             QPushButton, QApplication, QMainWindow, QMenuBar, 
-                             QMenu, QAction, QMessageBox)
+from PyQt5.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit, QComboBox, QSpacerItem, QSizePolicy, QProgressBar, QPushButton, QApplication, QMainWindow, QMenuBar, QMenu, QAction, QMessageBox)
 from PyQt5.QtGui import QPixmap, QIcon  # Додано QIcon для малювання кубика
 
 # Minecraft Launcher Lib
@@ -354,24 +351,21 @@ class MainWindow(QMainWindow):
         
         self.titlespacer = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
         
-        # --- ЮЗЕРНЕЙМ ТА КНОПКА ГЕНЕРАЦІЇ НІКНЕЙМУ (ЗАМІСТЬ ЧЕРВОНОГО КВАДРАТА) ---
+        # --- ЮЗЕРНЕЙМ ТА КНОПКА ГЕНЕРАЦІЇ НІКНЕЙМУ ---
         self.username = QLineEdit(self.centralwidget)
         self.username.setPlaceholderText('Username')
         
-        # Створюємо горизонтальний контейнер, щоб поставити кнопку в один рядок із полем імені
         self.username_layout = QHBoxLayout()
         self.username_layout.addWidget(self.username)
         
-        # Створення кнопки з кубиком
         self.random_username_button = QPushButton(self.centralwidget)
         dice_icon_path = 'assets/dice.png'
         
         if os.path.exists(dice_icon_path):
             self.random_username_button.setIcon(QIcon(dice_icon_path))
             self.random_username_button.setIconSize(QSize(20, 20))
-            self.random_username_button.setFlat(True)  # Робимо її акуратною, без громіздких меж рамки
+            self.random_username_button.setFlat(True)
         else:
-            # Текстовий варіант (емодзі), якщо іконку-файл не знайшли
             self.random_username_button.setText('🎲')
             self.random_username_button.setStyleSheet('font-size: 16px; border: 1px solid #bdc3c7; background: #ecf0f1; border-radius: 4px;')
             
@@ -379,7 +373,6 @@ class MainWindow(QMainWindow):
         self.random_username_button.clicked.connect(self.generate_random_nickname)
         self.username_layout.addWidget(self.random_username_button)
         self.username_layout.setContentsMargins(0, 0, 0, 0)
-        # ----------------------------------------------------------------------
         
         # Вибір версії
         self.version_select = QComboBox(self.centralwidget)
@@ -410,9 +403,7 @@ class MainWindow(QMainWindow):
         self.vertical_layout.addWidget(self.logo, 0, Qt.AlignmentFlag.AlignHCenter)
         self.vertical_layout.addItem(self.titlespacer)
         
-        # Додаємо наш горизонтальний рядок (Поле введення + Кубик)
         self.vertical_layout.addLayout(self.username_layout)
-        
         self.vertical_layout.addWidget(self.version_select)
         self.vertical_layout.addItem(self.progress_spacer)
         self.vertical_layout.addWidget(self.start_progress_label) 
@@ -427,7 +418,7 @@ class MainWindow(QMainWindow):
     
     def state_update(self, value):
         self.start_button.setDisabled(value)
-        self.random_username_button.setDisabled(value)  # Блокуємо кубик під час запуску гри
+        self.random_username_button.setDisabled(value)
         self.start_progress_label.setVisible(value)
         self.start_progress.setVisible(value)
 
@@ -453,13 +444,63 @@ class MainWindow(QMainWindow):
             self.start_progress_label.setVisible(True)
             self.start_button.setEnabled(False)
             
+            # --- НОВИЙ УНІВЕРСАЛЬНИЙ ПОШУК JDK ---
+            java_home = None
+            
+            # 1. Пробуємо витягнути компілятор javac безпосередньо через систему (shutil.which)
+            javac_path = shutil.which('javac')
+            if javac_path:
+                # Якщо знайшли 'javac.exe', піднімаємось на рівень вище з папки bin
+                java_home = os.path.dirname(os.path.dirname(javac_path))
+            
+            # 2. Якщо не знайшли, скануємо папки Java у Program Files
+            if not java_home:
+                possible_jdk_paths = []
+                program_files = os.environ.get('ProgramFiles', r'C:\Program Files')
+                jdk_root = os.path.join(program_files, 'Java')
+                
+                if os.path.isdir(jdk_root):
+                    for folder in os.listdir(jdk_root):
+                        # Шукаємо будь-які папки JDK (21, або інші нові, що підтримують 1.21.4)
+                        if "jdk" in folder.lower() or "zulu" in folder.lower() or "temurin" in folder.lower():
+                            possible_jdk_paths.append(os.path.join(jdk_root, folder))
+                
+                # Перевіряємо, де з них реально лежить працюючий javac.exe
+                for path in possible_jdk_paths:
+                    if os.path.exists(os.path.join(path, "bin", "javac.exe")):
+                        java_home = path
+                        break
+
+            # 3. Крайній випадок: якщо глобальні змінні вказують на JDK, але без явного javac у PATH
+            if not java_home:
+                env_java_home = os.environ.get('JAVA_HOME')
+                if env_java_home and os.path.exists(os.path.join(env_java_home, "bin", "javac.exe")):
+                    java_home = env_java_home
+
+            # Якщо навіть після цього JDK не знайшли — видаємо інформативне вікно
+            if not java_home:
+                QMessageBox.critical(
+                    self, 
+                    'Java Error', 
+                    'JDK (Java Development Kit) not found!\n\n'
+                    'Gradle requires JDK with compiler to build mods.\n'
+                    'Please make sure JDK 21 is installed and "javac" works.'
+                )
+                self.start_button.setEnabled(True)
+                self.start_progress.setVisible(False)
+                self.start_progress_label.setVisible(False)
+                return False
+
+            print(f"[DEBUG] Found and selected JAVA_HOME for compiler: {java_home}")
+            # -------------------------------------
+
             env = os.environ.copy()
-            env['JAVA_HOME'] = r'C:\Program Files\Java\jdk-21.0.11'
-            env['PATH'] = env.get('PATH', '') + ';' + r'C:\Program Files\Java\jdk-21.0.11\bin'
+            env['JAVA_HOME'] = java_home
+            env['PATH'] = java_home + os.path.sep + 'bin' + os.pathsep + env.get('PATH', '')
             
             creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
             result = subprocess.run(
-                [gradlew, 'build', '--stacktrace'],
+                [gradlew, 'clean', 'build', '--stacktrace', '--no-daemon'],
                 cwd=mod_dir,
                 creationflags=creationflags,
                 capture_output=True,
@@ -468,14 +509,21 @@ class MainWindow(QMainWindow):
             )
             
             if result.returncode != 0:
-                QMessageBox.critical(self, 'Build Failed', f'Mod build failed:\n{result.stderr}')
+                print("\n=== GRADLE BUILD FAILED DETAILED LOG ===")
+                if result.stdout:
+                    print(f"STDOUT:\n{result.stdout}")
+                if result.stderr:
+                    print(f"STDERR:\n{result.stderr}")
+                print("=========================================\n")
+                
+                QMessageBox.critical(self, 'Build Failed', 'Mod build failed. Check terminal for full log.')
                 self.start_button.setEnabled(True)
                 self.start_progress.setVisible(False)
                 self.start_progress_label.setVisible(False)
                 return False
             
             libs_dir = os.path.join(mod_dir, 'build', 'libs')
-            jar_files = [f for f in os.listdir(libs_dir) if f.endswith('.jar') and 'mod_1_21_4' in f]
+            jar_files = [f for f in os.listdir(libs_dir) if f.endswith('.jar') and 'mod_1_21_4' in f and not 'plain' in f]
             
             if not jar_files:
                 QMessageBox.warning(self, 'Error', 'No JAR file found in build/libs!')
@@ -487,8 +535,9 @@ class MainWindow(QMainWindow):
             mods_dir = os.path.join(os.path.dirname(__file__), 'minecraft', 'mods')
             os.makedirs(mods_dir, exist_ok=True)
             
-            src_jar = os.path.join(libs_dir, jar_files[0])
-            dst_jar = os.path.join(mods_dir, jar_files[0])
+            jar_files.sort()
+            src_jar = os.path.join(libs_dir, jar_files[-1])
+            dst_jar = os.path.join(mods_dir, jar_files[-1])
             
             if os.path.exists(dst_jar):
                 os.remove(dst_jar)
@@ -508,7 +557,6 @@ class MainWindow(QMainWindow):
         self.start_progress_label.setText(text)
         QApplication.processEvents()
     
-    # ФУНКЦІЯ ДЛЯ ГЕНЕРАЦІЇ НІКНЕЙМУ ПО КЛІКУ НА КУБИК
     def generate_random_nickname(self):
         generated = generate_username()[0]
         self.username.setText(generated)
@@ -519,7 +567,6 @@ class MainWindow(QMainWindow):
         
         version_id = self.version_select.currentData() or self.version_select.currentText()
         
-        # Перевірка: якщо користувач не ввів нікнейм і не тиснув на кубик, згенеруємо автоматично перед стартом
         current_username = self.username.text().strip()
         if not current_username:
             current_username = generate_username()[0]
