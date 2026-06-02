@@ -1,23 +1,27 @@
 import os
+import re
+import subprocess
+import sys
+import shutil
+import urllib.request
+from sys import argv, exit
+from uuid import uuid1
 
+# Імпорти PyQt5
 from PyQt5.QtCore import QThread, pyqtSignal, QSize, Qt
-from PyQt5.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit, QComboBox, QSpacerItem, QSizePolicy, QProgressBar, QPushButton, QApplication, QMainWindow, QMenuBar, QMenu, QAction, QMessageBox
-from PyQt5.QtGui import QPixmap
+from PyQt5.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit, 
+                             QComboBox, QSpacerItem, QSizePolicy, QProgressBar, 
+                             QPushButton, QApplication, QMainWindow, QMenuBar, 
+                             QMenu, QAction, QMessageBox)
+from PyQt5.QtGui import QPixmap, QIcon  # Додано QIcon для малювання кубика
 
+# Minecraft Launcher Lib
 from minecraft_launcher_lib.install import install_minecraft_version
 from minecraft_launcher_lib.fabric import install_fabric
 from minecraft_launcher_lib.command import get_minecraft_command
 
-# Эти импорты не обязательны, вместо generate_username()[0] и str(uuid1()) можно оставить просто ''
+# Імпорти для генерації нікнеймів
 from random_username.generate import generate_username
-from uuid import uuid1
-
-import re
-import subprocess
-import sys
-from sys import argv, exit
-import shutil
-import urllib.request
 
 minecraft_directory = os.path.abspath(os.path.join(os.path.dirname(__file__), 'minecraft'))
 os.makedirs(minecraft_directory, exist_ok=True)
@@ -45,9 +49,11 @@ class LaunchThread(QThread):
     def update_progress_label(self, value):
         self.progress_label = value
         self.progress_update_signal.emit(self.progress, self.progress_max, self.progress_label)
+        
     def update_progress(self, value):
         self.progress = value
         self.progress_update_signal.emit(self.progress, self.progress_max, self.progress_label)
+        
     def update_progress_max(self, value):
         self.progress_max = value
         self.progress_update_signal.emit(self.progress, self.progress_max, self.progress_label)
@@ -120,7 +126,6 @@ class LaunchThread(QThread):
 
         install_minecraft_version(version=self.version_id, minecraft_directory=minecraft_directory, callback={ 'setStatus': self.update_progress_label, 'setProgress': self.update_progress, 'setMax': self.update_progress_max })
 
-        # Check and install mod for 1.21.4
         if self.version_id == '1.21.4':
             mods_dir = os.path.join(minecraft_directory, 'mods')
             os.makedirs(mods_dir, exist_ok=True)
@@ -137,7 +142,6 @@ class LaunchThread(QThread):
         if self.username == '':
             self.username = generate_username()[0]
         
-        # For 1.21.4, use Fabric loader version
         if self.version_id == '1.21.4':
             fabric_version = 'fabric-loader-0.19.2-1.21.4'
             self.update_progress_label('Installing Fabric version...')
@@ -162,7 +166,6 @@ class LaunchThread(QThread):
                 self.launch_fabric_manually()
                 return
             
-            # Check and install mod for 1.21.4 - always copy to ensure latest version
             mods_dir = os.path.join(minecraft_directory, 'mods')
             os.makedirs(mods_dir, exist_ok=True)
             mod_jar_src = os.path.join(os.path.dirname(__file__), 'mod_1_21_4', 'build', 'libs', 'mod_1_21_4-1.0.0.jar')
@@ -175,7 +178,6 @@ class LaunchThread(QThread):
             else:
                 self.update_progress_label('Mod JAR not found, build the mod first')
 
-            # Download and install Fabric API if not present
             fabric_api_url = 'https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/0.115.1+1.21.4/fabric-api-0.115.1+1.21.4.jar'
             fabric_api_dst = os.path.join(mods_dir, 'fabric-api-0.115.1+1.21.4.jar')
             if not os.path.exists(fabric_api_dst):
@@ -201,7 +203,6 @@ class LaunchThread(QThread):
                 self.state_update_signal.emit(False)
                 return
 
-            # Use the Fabric version command
             options = {
                 'username': self.username,
                 'uuid': str(uuid1()),
@@ -215,7 +216,6 @@ class LaunchThread(QThread):
 
             command = get_minecraft_command(version=fabric_version, minecraft_directory=minecraft_directory, options=options)
 
-            # Force javaw when possible
             if os.name == 'nt' and command:
                 javaw_path = None
                 binary = os.path.basename(command[0]).lower()
@@ -234,17 +234,12 @@ class LaunchThread(QThread):
                 self.state_update_signal.emit(False)
                 return
         else:
-            # For other versions, use standard launcher
-            # Determine Java runtime path based on version
             java_runtime_path = None
             if self.version_id.startswith('1.21'):
-                # Use java-runtime-delta for modern versions
                 java_runtime_path = os.path.join(minecraft_directory, 'runtime', 'java-runtime-delta', 'bin', 'javaw.exe')
             else:
-                # Use jre-legacy for older versions like 1.16.5
                 java_runtime_path = os.path.join(minecraft_directory, 'runtime', 'jre-legacy', 'bin', 'javaw.exe')
             
-            # Fall back to default if runtime not found
             if not os.path.exists(java_runtime_path):
                 java_runtime_path = self.find_java_executable()
                 if java_runtime_path is None:
@@ -265,7 +260,6 @@ class LaunchThread(QThread):
 
             command = get_minecraft_command(version=self.version_id, minecraft_directory=minecraft_directory, options=options)
 
-            # Force javaw when possible so no extra JVM console appears, and use the runtime's javaw if available.
             if os.name == 'nt' and command:
                 javaw_path = None
                 binary = os.path.basename(command[0]).lower()
@@ -282,30 +276,24 @@ class LaunchThread(QThread):
         self.state_update_signal.emit(False)
 
     def launch_fabric_manually(self):
-        """Fallback method to launch Fabric manually like fabric_start.bat"""
         if self.username == '':
             self.username = generate_username()[0]
         
         self.update_progress_label('Launching Fabric manually...')
-        
-        # Set environment variables like in fabric_start.bat
         os.environ['APPDATA'] = minecraft_directory
         
-        # Find Java executable
         java_exe = self.find_java_executable()
         if java_exe is None:
             self.update_progress_label('Java executable not found. Install Java and add it to PATH or set JAVA_HOME.')
             self.state_update_signal.emit(False)
             return
 
-        # Build classpath like fabric_start.bat
         libraries_path = os.path.join(minecraft_directory, 'libraries')
         version_jar = os.path.join(minecraft_directory, 'versions', self.version_id, f'{self.version_id}.jar')
         fabric_loader_jar = os.path.join(libraries_path, 'net', 'fabricmc', 'fabric-loader', '0.19.2', 'fabric-loader-0.19.2.jar')
         
         classpath = os.pathsep.join([os.path.join(libraries_path, '*'), version_jar, fabric_loader_jar])
         
-        # Fabric launch command
         command = [
             java_exe,
             '-Xmx2G',
@@ -336,27 +324,13 @@ class LaunchThread(QThread):
             self.update_progress_label(f'Cannot launch Fabric: Java executable not found ({java_exe})')
         self.state_update_signal.emit(False)
 
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        # Create menu bar
+        # Меню
         self.menubar = self.menuBar()
-        
-        # Mod menu
-        self.mod_menu = self.menubar.addMenu('Mod')
-        
-        # Functions submenu
-        self.functions_menu = self.mod_menu.addMenu('Functions')
-        self.nether_wart_farm_action = QAction('NetherWartFarm', self)
-        self.nether_wart_farm_action.triggered.connect(self.launch_nether_wart_farm)
-        self.functions_menu.addAction(self.nether_wart_farm_action)
-        
-        # FunPay menu item
-        self.funpay_action = QAction('FunPay', self)
-        self.mod_menu.addAction(self.funpay_action)
-        
-        # About menu
         self.about_menu = self.menubar.addMenu('About')
         self.about_us_action = QAction('About Us', self)
         self.about_us_action.triggered.connect(self.show_about_us)
@@ -366,6 +340,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle('Unl1m1t3d Launcher')
         self.centralwidget = QWidget(self)
         
+        # Логотип
         self.logo = QLabel(self.centralwidget)
         self.logo.setMaximumSize(QSize(256, 37))
         self.logo.setText('')
@@ -379,17 +354,40 @@ class MainWindow(QMainWindow):
         
         self.titlespacer = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
         
+        # --- ЮЗЕРНЕЙМ ТА КНОПКА ГЕНЕРАЦІЇ НІКНЕЙМУ (ЗАМІСТЬ ЧЕРВОНОГО КВАДРАТА) ---
         self.username = QLineEdit(self.centralwidget)
         self.username.setPlaceholderText('Username')
         
+        # Створюємо горизонтальний контейнер, щоб поставити кнопку в один рядок із полем імені
+        self.username_layout = QHBoxLayout()
+        self.username_layout.addWidget(self.username)
+        
+        # Створення кнопки з кубиком
+        self.random_username_button = QPushButton(self.centralwidget)
+        dice_icon_path = 'assets/dice.png'
+        
+        if os.path.exists(dice_icon_path):
+            self.random_username_button.setIcon(QIcon(dice_icon_path))
+            self.random_username_button.setIconSize(QSize(20, 20))
+            self.random_username_button.setFlat(True)  # Робимо її акуратною, без громіздких меж рамки
+        else:
+            # Текстовий варіант (емодзі), якщо іконку-файл не знайшли
+            self.random_username_button.setText('🎲')
+            self.random_username_button.setStyleSheet('font-size: 16px; border: 1px solid #bdc3c7; background: #ecf0f1; border-radius: 4px;')
+            
+        self.random_username_button.setFixedSize(30, 30)
+        self.random_username_button.clicked.connect(self.generate_random_nickname)
+        self.username_layout.addWidget(self.random_username_button)
+        self.username_layout.setContentsMargins(0, 0, 0, 0)
+        # ----------------------------------------------------------------------
+        
+        # Вибір версії
         self.version_select = QComboBox(self.centralwidget)
         self.version_select.addItem('1.21.4', '1.21.4')
         
         self.progress_spacer = QSpacerItem(20, 20, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         
-        # Исправил проблему с созданием описания для полосы прогресса
-        # В [24:01] можно заметить что QProgressDialog работает не так как надо, а просто QProgressBar не имеет при себе описания
-        # Из-за этого я удалил систему с описанием, но тут я ее добавил, просто дописав еще один элемент - QLabel, ну и не забыв добавить его в self.vertical_layout :)
+        # Прогрес-бар та лейбл
         self.start_progress_label = QLabel(self.centralwidget)
         self.start_progress_label.setText('')
         self.start_progress_label.setVisible(False)
@@ -398,6 +396,7 @@ class MainWindow(QMainWindow):
         self.start_progress.setProperty('value', 24)
         self.start_progress.setVisible(False)
         
+        # Кнопка Play
         self.start_button = QPushButton(self.centralwidget)
         self.start_button.setText('Play')
         self.start_button.clicked.connect(self.launch_game)
@@ -405,14 +404,18 @@ class MainWindow(QMainWindow):
         self.buttons_layout = QHBoxLayout()
         self.buttons_layout.addWidget(self.start_button)
         
+        # Головна вертикальна розмітка вікна
         self.vertical_layout = QVBoxLayout(self.centralwidget)
         self.vertical_layout.setContentsMargins(15, 15, 15, 15)
         self.vertical_layout.addWidget(self.logo, 0, Qt.AlignmentFlag.AlignHCenter)
         self.vertical_layout.addItem(self.titlespacer)
-        self.vertical_layout.addWidget(self.username)
+        
+        # Додаємо наш горизонтальний рядок (Поле введення + Кубик)
+        self.vertical_layout.addLayout(self.username_layout)
+        
         self.vertical_layout.addWidget(self.version_select)
         self.vertical_layout.addItem(self.progress_spacer)
-        self.vertical_layout.addWidget(self.start_progress_label) # Исправил проблему с созданием описания для полосы прогресса [24:01]
+        self.vertical_layout.addWidget(self.start_progress_label) 
         self.vertical_layout.addWidget(self.start_progress)
         self.vertical_layout.addLayout(self.buttons_layout)
 
@@ -424,15 +427,16 @@ class MainWindow(QMainWindow):
     
     def state_update(self, value):
         self.start_button.setDisabled(value)
+        self.random_username_button.setDisabled(value)  # Блокуємо кубик під час запуску гри
         self.start_progress_label.setVisible(value)
         self.start_progress.setVisible(value)
+
     def update_progress(self, progress, max_progress, label):
         self.start_progress.setValue(progress)
         self.start_progress.setMaximum(max_progress)
-        self.start_progress_label.setText(label) # Исправил проблему с созданием описания для полосы прогресса [24:01]
+        self.start_progress_label.setText(label) 
     
     def build_mod(self):
-        """Компілює мод через gradle синхронно перед запуском гри"""
         try:
             mod_dir = os.path.join(os.path.dirname(__file__), 'mod_1_21_4')
             if not os.path.exists(mod_dir):
@@ -449,12 +453,10 @@ class MainWindow(QMainWindow):
             self.start_progress_label.setVisible(True)
             self.start_button.setEnabled(False)
             
-            # Налаштування оточення з Java 21
             env = os.environ.copy()
             env['JAVA_HOME'] = r'C:\Program Files\Java\jdk-21.0.11'
             env['PATH'] = env.get('PATH', '') + ';' + r'C:\Program Files\Java\jdk-21.0.11\bin'
             
-            # Запускаємо gradle build синхронно
             creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
             result = subprocess.run(
                 [gradlew, 'build', '--stacktrace'],
@@ -472,7 +474,6 @@ class MainWindow(QMainWindow):
                 self.start_progress_label.setVisible(False)
                 return False
             
-            # Знаходимо jar файл
             libs_dir = os.path.join(mod_dir, 'build', 'libs')
             jar_files = [f for f in os.listdir(libs_dir) if f.endswith('.jar') and 'mod_1_21_4' in f]
             
@@ -483,7 +484,6 @@ class MainWindow(QMainWindow):
                 self.start_progress_label.setVisible(False)
                 return False
             
-            # Копіюємо jar в папку модів
             mods_dir = os.path.join(os.path.dirname(__file__), 'minecraft', 'mods')
             os.makedirs(mods_dir, exist_ok=True)
             
@@ -505,17 +505,27 @@ class MainWindow(QMainWindow):
             return False
     
     def update_progress_label(self, text):
-        """Оновлює текст прогресу в UI"""
         self.start_progress_label.setText(text)
         QApplication.processEvents()
     
+    # ФУНКЦІЯ ДЛЯ ГЕНЕРАЦІЇ НІКНЕЙМУ ПО КЛІКУ НА КУБИК
+    def generate_random_nickname(self):
+        generated = generate_username()[0]
+        self.username.setText(generated)
+
     def launch_game(self):
-        # Build mod first before launching
         if not self.build_mod():
             return
         
         version_id = self.version_select.currentData() or self.version_select.currentText()
-        self.launch_thread.launch_setup_signal.emit(version_id, self.username.text())
+        
+        # Перевірка: якщо користувач не ввів нікнейм і не тиснув на кубик, згенеруємо автоматично перед стартом
+        current_username = self.username.text().strip()
+        if not current_username:
+            current_username = generate_username()[0]
+            self.username.setText(current_username)
+
+        self.launch_thread.launch_setup_signal.emit(version_id, current_username)
         self.launch_thread.start()
 
     def show_about_us(self):
@@ -536,7 +546,6 @@ class MainWindow(QMainWindow):
         QMessageBox.about(self, "About Unl1m1t3d Launcher", about_text)
 
     def launch_nether_wart_farm(self):
-        """Launch the NetherWartFarm function"""
         QMessageBox.information(self, "NetherWartFarm", "NetherWartFarm function is under development.")
 
 if __name__ == '__main__':
