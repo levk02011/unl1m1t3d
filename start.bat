@@ -1,10 +1,15 @@
 @echo off
 cd /d %~dp0
-if exist .venv\Scripts\pythonw.exe (
-    start "" /B .venv\Scripts\pythonw.exe qt_version.py
-) else if exist .venv\Scripts\python.exe (
-    start "" /B .venv\Scripts\python.exe qt_version.py
-) else (
-    start "" /B pyw -3 qt_version.py
+
+REM Спочатку запускаємо перевірку залежностей
+call startcheck.bat
+if errorlevel 1 (
+    echo [!] startcheck.bat завершився з помилкою
+    pause
+    exit /b 1
 )
+
+echo.
+echo [*] Роботу програми завершено.
+pause
 exit /b 0
