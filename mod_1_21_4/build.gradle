@@ -11,6 +11,12 @@ base {
 }
 
 repositories {
+	mavenLocal()
+	// Fabric official repository
+	maven {
+		name = 'Fabric'
+		url = 'https://maven.fabricmc.net/'
+	}
 	// Додаємо репозиторій, де зберігаються збірки Baritone
 	maven { 
 		name = 'ImpactDevelopment'
@@ -34,8 +40,9 @@ dependencies {
 
 	// Інтеграція Baritone API під Minecraft 1.21.4.
 	// Використовуємо modImplementation + include, щоб API було доступне під час розробки та пакувалося в мод.
-	modImplementation "baritone:baritone-api:1.21.4-SNAPSHOT"
-	include "baritone:baritone-api:1.21.4-SNAPSHOT"
+	// Using proper semantic versioning for Baritone API
+	modImplementation "cabaletta:baritone-api:1.10.0"
+	include "cabaletta:baritone-api:1.10.0"
 }
 
 processResources {

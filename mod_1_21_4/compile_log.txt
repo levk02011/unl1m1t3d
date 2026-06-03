@@ -1,0 +1,14 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.10.2/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+
+> Configure project :
+Fabric Loom: 1.7.4
+
+> Task :clean
+
+> Task :compileJava
+Note: C:\Users\fhhfd\Documents\GitHub\unl1m1t3d\mod_1_21_4\src\main\java\com\example\mod_1_21_4\AutoSellHandler.java uses unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+
+BUILD SUCCESSFUL in 38s
+2 actionable tasks: 2 executed

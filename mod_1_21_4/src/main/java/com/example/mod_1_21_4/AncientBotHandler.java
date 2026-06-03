@@ -4,6 +4,7 @@ package com.example.mod_1_21_4;
 import baritone.api.BaritoneAPI;
 import baritone.api.IBaritone;
 import baritone.api.pathing.goals.GoalBlock;
+import baritone.api.utils.Rotation;
 
 import net.minecraft.block.Blocks;
 import net.minecraft.client.MinecraftClient;
@@ -84,7 +85,7 @@ public class AncientBotHandler {
         if (!baritone.getPathingBehavior().isPathing()) {
             player.sendMessage(Text.literal("§7[AncientBot] Розрахунок шляху до центру підриву..."), false);
             // Встановлюємо ціль безпосередньо в координати blastCenter
-            baritone.getCustomGoalProcess().setGoalAndPath(new GoalBlock(blastCenter));
+            baritone.getCustomGoalProcess().setGoalAndPath(new GoalBlock(blastCenter.getX(), blastCenter.getY(), blastCenter.getZ()));
         }
     
         // Перевіряємо, чи прийшли ми на місце (чи досягнута ціль)
@@ -95,10 +96,19 @@ public class AncientBotHandler {
         }
     }
 
+    private static void lookAtPosition(ClientPlayerEntity player, BlockPos target) {
+        double dx = target.getX() + 0.5 - player.getX();
+        double dz = target.getZ() + 0.5 - player.getZ();
+        double dy = target.getY() + 0.5 - player.getEyeY();
+        float yaw = (float) Math.toDegrees(Math.atan2(dz, dx)) - 90.0F;
+        float pitch = (float) (-Math.toDegrees(Math.atan2(dy, Math.sqrt(dx * dx + dz * dz))));
+        baritone.getLookBehavior().updateTarget(new Rotation(yaw, pitch), true);
+    }
+
     private static void collectingTick(ClientPlayerEntity player) {
         if (collectionIndex >= collectionPath.size()) {
             player.sendMessage(Text.literal("§6✓ Всі обломки зібрані."), false);
-            baritone.getPathingBehavior().cancel(); // Про всяк випадок стопаємо барітон
+            baritone.getPathingBehavior().cancelEverything(); // Про всяк випадок стопаємо барітон
             currentState = BotState.SCANNING;
             return;
         }
@@ -113,15 +123,15 @@ public class AncientBotHandler {
 
         // Даємо команду йти до уламка древніх дебрисів
         if (!baritone.getPathingBehavior().isPathing()) {
-            baritone.getCustomGoalProcess().setGoalAndPath(new GoalBlock(target));
+            baritone.getCustomGoalProcess().setGoalAndPath(new GoalBlock(target.getX(), target.getY(), target.getZ()));
         }
 
         // Коли підійшли впритул — зупиняємось і ламаємо рукою/киркою
         if (player.getBlockPos().getSquaredDistance(target) <= 4.5) {
-            baritone.getPathingBehavior().cancel(); // Тимчасово стопаємо рух для видобутку
+            baritone.getPathingBehavior().cancelEverything(); // Тимчасово стопаємо рух для видобутку
             
             // Повертаємо голову через вбудований LookBehavior Барітона (щоб не трясло античітом)
-            baritone.getLookBehavior().lookAt(target);
+            lookAtPosition(player, target);
             
             MinecraftClient.getInstance().interactionManager.attackBlock(target, Direction.UP);
             player.swingHand(Hand.MAIN_HAND);
@@ -133,7 +143,7 @@ public class AncientBotHandler {
     private static void emergencyExit(ClientPlayerEntity player, String reason) {
         lastExitReason = reason;
         currentState = BotState.EMERGENCY_EXIT;
-        baritone.getPathingBehavior().cancel(); // Обов'язково вимикаємо барітон при паніці!
+        baritone.getPathingBehavior().cancelEverything(); // Обов'язково вимикаємо барітон при паніці!
         player.networkHandler.sendCommand("hub");
         player.sendMessage(Text.literal("§c🚨 ЕВАКУАЦІЯ: " + reason), false);
     }
@@ -144,7 +154,7 @@ public class AncientBotHandler {
             lastExitReason = "Деактивовано користувачем";
             currentState = BotState.IDLE;
             
-            baritone.getPathingBehavior().cancel(); // Стопаємо автобіг барітона
+            baritone.getPathingBehavior().cancelEverything(); // Стопаємо автобіг барітона
             
             player.sendMessage(Text.literal("§c[AncientBot] Деактивовано! Baritone зупинено."), false);
         }
