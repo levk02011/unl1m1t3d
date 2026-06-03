@@ -1,9 +1,9 @@
 package com.example.mod_1_21_4;
 
-import net.fabricmc.api.ModInitializer;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import net.fabricmc.api.ModInitializer;
 
 public class Mod_1_21_4 implements ModInitializer {
 	// This logger is used to write text to the console and the log file.

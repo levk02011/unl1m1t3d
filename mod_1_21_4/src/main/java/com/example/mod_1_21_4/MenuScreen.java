@@ -20,6 +20,14 @@ public class MenuScreen extends Screen {
         super(title);
     }
 
+    public void setSelectedSection(int section) {
+        this.selectedSection = section;
+    }
+
+    public void clearAndInit() {
+        this.init();
+    }
+
     private static String toggleLabel(String name, boolean enabled) {
         return name + (enabled ? " : ON" : " : OFF");
     }
@@ -40,6 +48,7 @@ public class MenuScreen extends Screen {
         int pveColumnX = SIDEBAR_WIDTH + 15;
         int extraColumnX = pveColumnX + buttonWidth + columnSpacing;
 
+        // --- САЙДБАР МЕНЮ ---
         this.addDrawableChild(ButtonWidget.builder(Text.literal("function"), button -> {
             selectedSection = 0;
             init();
@@ -55,6 +64,13 @@ public class MenuScreen extends Screen {
             init();
         }).dimensions(sectionsColumnX, startY + (buttonHeight + spacing) * 2, sectionWidth, buttonHeight).build());
 
+        this.addDrawableChild(ButtonWidget.builder(Text.literal("funpay"), button -> {
+            selectedSection = 3;
+            init();
+        }).dimensions(sectionsColumnX, startY + (buttonHeight + spacing) * 3, sectionWidth, buttonHeight).build());
+
+
+        // --- КОНТЕНТ РОЗДІЛІВ ---
         if (selectedSection == 0) {
             this.addDrawableChild(ButtonWidget.builder(Text.literal(toggleLabel("auto warden", Mod_1_21_4Client.autoWardenEnabled)), button -> {
                 Mod_1_21_4Client.autoWardenEnabled = !Mod_1_21_4Client.autoWardenEnabled;
@@ -104,10 +120,6 @@ public class MenuScreen extends Screen {
                 init();
             }).dimensions(pveColumnX, startY + (buttonHeight + spacing) * 4, buttonWidth, buttonHeight).build());
 
-            this.addDrawableChild(ButtonWidget.builder(Text.literal(toggleLabel("fun pay", Mod_1_21_4Client.funPayEnabled)), button -> {
-                Mod_1_21_4Client.funPayEnabled = !Mod_1_21_4Client.funPayEnabled;
-                init();
-            }).dimensions(pveColumnX, startY + (buttonHeight + spacing) * 5, buttonWidth, buttonHeight).build());
         } else if (selectedSection == 1) {
             this.addDrawableChild(ButtonWidget.builder(Text.literal(getBindButtonLabel("auto warden")), button -> {
                 capturingBindFunction = "auto warden";
@@ -149,16 +161,20 @@ public class MenuScreen extends Screen {
                 init();
             }).dimensions(pveColumnX, startY + (buttonHeight + spacing) * 4, buttonWidth, buttonHeight).build());
 
-            this.addDrawableChild(ButtonWidget.builder(Text.literal(getBindButtonLabel("fun pay")), button -> {
-                capturingBindFunction = "fun pay";
-                init();
-            }).dimensions(pveColumnX, startY + (buttonHeight + spacing) * 5, buttonWidth, buttonHeight).build());
-        } else {
-            // About Us section - display info from launcher
+        } else if (selectedSection == 2) {
             this.addDrawableChild(ButtonWidget.builder(Text.literal("Back"), button -> {
                 selectedSection = 0;
                 init();
             }).dimensions(pveColumnX, startY, buttonWidth, buttonHeight).build());
+
+        } else if (selectedSection == 3) {
+            // Безпечно додаємо кнопки з FPI через локальний контекст Screen
+            if (!FPI.isLoggedIn) {
+                this.addDrawableChild(FPI.createLoginButton(this, pveColumnX, startY, buttonWidth, buttonHeight));
+            } else {
+                this.addDrawableChild(FPI.createLogoutButton(this, pveColumnX, startY, buttonWidth, buttonHeight));
+            }
+            this.addDrawableChild(FPI.createBackButton(this, pveColumnX, startY, buttonWidth, buttonHeight, spacing));
         }
 
         this.addDrawableChild(ButtonWidget.builder(Text.literal("Close"), button -> {
@@ -175,24 +191,22 @@ public class MenuScreen extends Screen {
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        // Draw sidebar background
         context.fill(0, 0, SIDEBAR_WIDTH, this.height, SIDEBAR_BG_COLOR);
-        
-        // Draw content area background
         context.fill(SIDEBAR_WIDTH, 0, this.width, this.height, CONTENT_BG_COLOR);
-        
-        // Draw vertical divider line
         context.fill(SIDEBAR_WIDTH, 0, SIDEBAR_WIDTH + 2, this.height, DIVIDER_COLOR);
 
-        // Draw titles
         context.drawTextWithShadow(this.textRenderer, "UNLIMITED", 15, 15, 0xFF000000);
         context.drawTextWithShadow(this.textRenderer, "РОЗДІЛИ", 20, 35, 0xFF000000);
-        context.drawTextWithShadow(this.textRenderer, "PVE", SIDEBAR_WIDTH + 15, 35, 0xFF000000);
-        context.drawTextWithShadow(this.textRenderer, "Додаткові", SIDEBAR_WIDTH + 145, 35, 0xFF000000);
+
+        if (selectedSection == 3) {
+            FPI.render(context, this.textRenderer, SIDEBAR_WIDTH, this.height, this.width);
+        } else if (selectedSection != 2) {
+            context.drawTextWithShadow(this.textRenderer, "PVE", SIDEBAR_WIDTH + 15, 35, 0xFF000000);
+            context.drawTextWithShadow(this.textRenderer, "Додаткові", SIDEBAR_WIDTH + 145, 35, 0xFF000000);
+        }
 
         super.render(context, mouseX, mouseY, delta);
 
-        // Render About Us content if in that section (after buttons are rendered)
         if (selectedSection == 2) {
             int textX = SIDEBAR_WIDTH + 20;
             int textY = 60;
@@ -212,7 +226,7 @@ public class MenuScreen extends Screen {
             context.drawTextWithShadow(this.textRenderer, "- Auto Eat & Invis", textX + 10, textY + lineHeight * 10, color);
             context.drawTextWithShadow(this.textRenderer, "- Auto Sell Support", textX + 10, textY + lineHeight * 11, color);
             context.drawTextWithShadow(this.textRenderer, "- NetherWartFarm", textX + 10, textY + lineHeight * 12, color);
-            context.drawTextWithShadow(this.textRenderer, "- FunPay", textX + 10, textY + lineHeight * 13, color);
+            context.drawTextWithShadow(this.textRenderer, "- FunPay Module", textX + 10, textY + lineHeight * 13, color);
             
             context.drawTextWithShadow(this.textRenderer, "Developed by: Unl1m1t3d Team", textX, textY + lineHeight * 15, color);
         }
