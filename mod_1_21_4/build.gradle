@@ -39,10 +39,10 @@ dependencies {
 	implementation "com.google.code.gson:gson:2.10.1"
 
 	// Інтеграція Baritone API під Minecraft 1.21.4.
-	// Використовуємо modImplementation + include, щоб API було доступне під час розробки та пакувалося в мод.
-	// Using proper semantic versioning for Baritone API
-	modImplementation "cabaletta:baritone-api:1.10.0"
-	include "cabaletta:baritone-api:1.10.0"
+	// TEMPORARILY DISABLED: Baritone API artifact (cabaletta:baritone-api) is not available in any repository
+	// The code that uses Baritone will need to be refactored or the dependency needs to be sourced differently
+	// modImplementation "cabaletta:baritone-api:1.8.0"
+	// include "cabaletta:baritone-api:1.8.0"
 }
 
 processResources {
