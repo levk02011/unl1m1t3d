@@ -1,12 +1,16 @@
 package com.example.mod_1_21_4;
 
+// Імпортуємо Baritone API
+import baritone.api.BaritoneAPI;
+import baritone.api.IBaritone;
+import baritone.api.pathing.goals.GoalBlock;
+
 import net.minecraft.block.Blocks;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
-import net.minecraft.item.PickaxeItem;
 import net.minecraft.text.Text;
 import net.minecraft.util.Hand;
 import net.minecraft.util.hit.BlockHitResult;
@@ -18,11 +22,10 @@ import net.minecraft.world.World;
 import java.util.*;
 
 /**
- * AncientBot v2.1 - Оптимізована версія
+ * AncientBot v2.2 - Інтегровано з Baritone API
  */
 public class AncientBotHandler {
     private static final int SCAN_RADIUS = 17;
-    private static final int TOLERANCE = 5;
     private static final long HUB_DELAY = 5000; 
     
     enum BotState {
@@ -35,7 +38,6 @@ public class AncientBotHandler {
     private static long stateStartTime = 0;
     private static String lastExitReason = "Невідомо";
     private static long lastExitTime = 0;
-    private static BotState lastExitState = BotState.IDLE;
     
     private static BlockPos blastCenter = null;
     private static List<BlockPos> debrisLocations = new ArrayList<>();
@@ -44,11 +46,13 @@ public class AncientBotHandler {
     private static int scanProgress = 0;
     private static Map<BlockPos, Integer> blockDensityMap = new HashMap<>();
     
+    // Отримуємо головний інстанс барітона для нашого гравця
+    private static final IBaritone baritone = BaritoneAPI.getProvider().getPrimaryBaritone();
+
     public static void tick(MinecraftClient client) {
         ClientPlayerEntity player = client.player;
         if (player == null) return;
         
-        // Перевірка на критичні умови (евакуація)
         if (shouldEmergencyExit(player)) {
             if (currentState != BotState.EMERGENCY_EXIT) {
                 emergencyExit(player, "Критична умова (відсутність бафу/ресурсів)");
@@ -71,43 +75,91 @@ public class AncientBotHandler {
         }
     }
 
-    // ==================== ЛОГІКА РУХУ (БЕЗ ТРЯСКИ) ====================
+    // ==================== ОПТИМІЗОВАНИЙ РУХ ЧЕРЕЗ BARITONE ====================
     
     private static void moveToBlastCenterTick(ClientPlayerEntity player) {
         if (blastCenter == null) return;
     
-        Vec3d targetPos = Vec3d.ofCenter(blastCenter);
-        double distanceSq = player.getPos().squaredDistanceTo(targetPos);
-
-        if (distanceSq < 0.7) { // Радіус зупинки
-            stopMovement();
-            player.sendMessage(Text.literal("§a✓ На місці. Готуюсь до підриву."), false);
+        // Якщо Барітон ще не йде нікуди — даємо йому ціль
+        if (!baritone.getPathingBehavior().isPathing()) {
+            player.sendMessage(Text.literal("§7[AncientBot] Розрахунок шляху до центру підриву..."), false);
+            // Встановлюємо ціль безпосередньо в координати blastCenter
+            baritone.getCustomGoalProcess().setGoalAndPath(new GoalBlock(blastCenter));
+        }
+    
+        // Перевіряємо, чи прийшли ми на місце (чи досягнута ціль)
+        if (player.getBlockPos().getSquaredDistance(blastCenter) <= 2.0 && !baritone.getPathingBehavior().isPathing()) {
+            player.sendMessage(Text.literal("§a✓ На місці за допомогою Baritone. Готуюсь до підриву."), false);
             currentState = BotState.BUFFING;
             stateStartTime = System.currentTimeMillis();
+        }
+    }
+
+    private static void collectingTick(ClientPlayerEntity player) {
+        if (collectionIndex >= collectionPath.size()) {
+            player.sendMessage(Text.literal("§6✓ Всі обломки зібрані."), false);
+            baritone.getPathingBehavior().cancel(); // Про всяк випадок стопаємо барітон
+            currentState = BotState.SCANNING;
             return;
         }
     
-        lookAt(targetPos);
+        BlockPos target = collectionPath.get(collectionIndex);
         
-        // Пробиваємо шлях, якщо попереду блоки
-        BlockPos headPos = player.getBlockPos().offset(player.getHorizontalFacing());
-        if (!player.getWorld().getBlockState(headPos).isAir() && !player.getWorld().getBlockState(headPos).isOf(Blocks.BEDROCK)) {
-            MinecraftClient.getInstance().interactionManager.attackBlock(headPos, Direction.UP);
+        // Якщо блок уже хтось зламав (або ми підібрали), переходимо до наступного
+        if (player.getWorld().getBlockState(target).isAir()) {
+            collectionIndex++;
+            return;
+        }
+
+        // Даємо команду йти до уламка древніх дебрисів
+        if (!baritone.getPathingBehavior().isPathing()) {
+            baritone.getCustomGoalProcess().setGoalAndPath(new GoalBlock(target));
+        }
+
+        // Коли підійшли впритул — зупиняємось і ламаємо рукою/киркою
+        if (player.getBlockPos().getSquaredDistance(target) <= 4.5) {
+            baritone.getPathingBehavior().cancel(); // Тимчасово стопаємо рух для видобутку
+            
+            // Повертаємо голову через вбудований LookBehavior Барітона (щоб не трясло античітом)
+            baritone.getLookBehavior().lookAt(target);
+            
+            MinecraftClient.getInstance().interactionManager.attackBlock(target, Direction.UP);
             player.swingHand(Hand.MAIN_HAND);
         }
-    
-        MinecraftClient.getInstance().options.forwardKey.setPressed(true);
     }
 
+    // ==================== ЗМІНИ В ЕВАКУАЦІЇ ТА ДЕАКТИВАЦІЇ ====================
+
+    private static void emergencyExit(ClientPlayerEntity player, String reason) {
+        lastExitReason = reason;
+        currentState = BotState.EMERGENCY_EXIT;
+        baritone.getPathingBehavior().cancel(); // Обов'язково вимикаємо барітон при паніці!
+        player.networkHandler.sendCommand("hub");
+        player.sendMessage(Text.literal("§c🚨 ЕВАКУАЦІЯ: " + reason), false);
+    }
+
+    public static void deactivate(ClientPlayerEntity player) {
+        if (currentState != BotState.IDLE) {
+            lastExitTime = System.currentTimeMillis();
+            lastExitReason = "Деактивовано користувачем";
+            currentState = BotState.IDLE;
+            
+            baritone.getPathingBehavior().cancel(); // Стопаємо автобіг барітона
+            
+            player.sendMessage(Text.literal("§c[AncientBot] Деактивовано! Baritone зупинено."), false);
+        }
+    }
+
+    // ==================== ІНШІ МЕТОДИ (ЗАЛИШЕНІ БЕЗ ЗМІН) ====================
+    
     private static void buffingTick(ClientPlayerEntity player) {
         if (player.getStatusEffect(StatusEffects.FIRE_RESISTANCE) != null) {
             currentState = BotState.PLACING_EXPLOSIVE;
             stateStartTime = System.currentTimeMillis();
             return;
         }
-        
         long elapsed = System.currentTimeMillis() - stateStartTime;
-        if (elapsed > 1000 && elapsed < 4000) { // Затримка на пиття
+        if (elapsed > 1000 && elapsed < 4000) {
             ItemStack potion = findPotionInInventory(player);
             if (potion != null) {
                 int slot = findInventorySlot(player, potion);
@@ -121,69 +173,17 @@ public class AncientBotHandler {
         }
     }
 
-    private static void collectingTick(ClientPlayerEntity player) {
-        if (collectionIndex >= collectionPath.size()) {
-            player.sendMessage(Text.literal("§6✓ Всі обломки зібрані."), false);
-            currentState = BotState.SCANNING;
-            return;
-        }
-    
-        BlockPos target = collectionPath.get(collectionIndex);
-        Vec3d targetVec = Vec3d.ofCenter(target);
-        double distanceSq = player.getPos().squaredDistanceTo(targetVec);
-    
-        if (distanceSq < 4.5) {
-            stopMovement();
-            lookAt(targetVec);
-            MinecraftClient.getInstance().interactionManager.attackBlock(target, Direction.UP);
-            player.swingHand(Hand.MAIN_HAND);
-            
-            if (player.getWorld().getBlockState(target).isAir()) collectionIndex++;
-        } else {
-            lookAt(targetVec);
-            MinecraftClient.getInstance().options.forwardKey.setPressed(true);
-        }
-    }
-
-    // ==================== ДОПОМІЖНІ МЕТОДИ ====================
-
-    private static void lookAt(Vec3d target) {
-        ClientPlayerEntity player = MinecraftClient.getInstance().player;
-        if (player == null) return;
-        double diffX = target.x - player.getX();
-        double diffY = target.y - (player.getY() + player.getEyeHeight(player.getPose()));
-        double diffZ = target.z - player.getZ();
-        double diffXZ = Math.sqrt(diffX * diffX + diffZ * diffZ);
-        float yaw = (float) Math.toDegrees(Math.atan2(diffZ, diffX)) - 90.0F;
-        float pitch = (float) -Math.toDegrees(Math.atan2(diffY, diffXZ));
-        player.setYaw(yaw);
-        player.setPitch(pitch);
-    }
-
-    private static void stopMovement() {
-        MinecraftClient.getInstance().options.forwardKey.setPressed(false);
-        if (MinecraftClient.getInstance().player != null) {
-            Vec3d v = MinecraftClient.getInstance().player.getVelocity();
-            MinecraftClient.getInstance().player.setVelocity(0, v.y, 0);
-        }
-    }
-
     private static boolean shouldEmergencyExit(ClientPlayerEntity player) {
-        // Додано стани, в яких відсутність ефекту — це нормально
         if (player.getStatusEffect(StatusEffects.FIRE_RESISTANCE) == null &&
-            currentState != BotState.IDLE &&
-            currentState != BotState.SCANNING &&
-            currentState != BotState.MOVING_TO_BLAST_CENTER &&
-            currentState != BotState.BUFFING &&
-            currentState != BotState.EVACUATING &&
-            currentState != BotState.WAITING_IN_HUB &&
+            currentState != BotState.IDLE && currentState != BotState.SCANNING &&
+            currentState != BotState.MOVING_TO_BLAST_CENTER && currentState != BotState.BUFFING &&
+            currentState != BotState.EVACUATING && currentState != BotState.WAITING_IN_HUB &&
             currentState != BotState.RETURNING) {
             return true;
         }
         return false;
     }
 
-    // Логіка сканування, пошуку інвентаря та інше (залишено з версії 2.0)
     private static void scanningTick(ClientPlayerEntity player) {
         World world = player.getWorld();
         int y = -SCAN_RADIUS + scanProgress;
@@ -238,7 +238,7 @@ public class AncientBotHandler {
 
     private static void waitingInHubTick(ClientPlayerEntity player) {
         if (System.currentTimeMillis() - stateStartTime >= HUB_DELAY) {
-            player.networkHandler.sendCommand("an 1"); // Анархія номер 1 (зміни під свій конфиг)
+            player.networkHandler.sendCommand("an 1");
             currentState = BotState.RETURNING;
             stateStartTime = System.currentTimeMillis();
         }
@@ -264,13 +264,6 @@ public class AncientBotHandler {
             collectionIndex = 0;
             currentState = BotState.COLLECTING;
         }
-    }
-
-    private static void emergencyExit(ClientPlayerEntity player, String reason) {
-        lastExitReason = reason;
-        currentState = BotState.EMERGENCY_EXIT;
-        player.networkHandler.sendCommand("hub");
-        player.sendMessage(Text.literal("§c🚨 ЕВАКУАЦІЯ: " + reason), false);
     }
 
     private static ItemStack findPotionInInventory(ClientPlayerEntity player) {
@@ -302,22 +295,7 @@ public class AncientBotHandler {
         }
     }
 
-    public static void deactivate(ClientPlayerEntity player) {
-        if (currentState != BotState.IDLE) {
-            lastExitState = currentState;
-            lastExitTime = System.currentTimeMillis();
-            lastExitReason = "Деактивовано користувачем";
-            currentState = BotState.IDLE;
-            stopMovement();
-            player.sendMessage(Text.literal("§c[AncientBot] Деактивовано!"), false);
-        }
-    }
-
     public static void whyexit(ClientPlayerEntity player) {
         player.sendMessage(Text.literal("§e[AncientBot] Остання причина виходу: " + lastExitReason), false);
-        if (lastExitTime > 0) {
-            long ago = (System.currentTimeMillis() - lastExitTime) / 1000;
-            player.sendMessage(Text.literal("§e[AncientBot] " + ago + " секунд тому"), false);
-        }
     }
 }
