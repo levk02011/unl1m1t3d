@@ -1,3 +1,4 @@
+
 import os
 import re
 import subprocess
@@ -19,6 +20,9 @@ from minecraft_launcher_lib.command import get_minecraft_command
 
 # Імпорти для генерації нікнеймів
 from random_username.generate import generate_username
+
+#Імпорт із modsintegrated.py
+from modsintegrated import sync_mods
 
 minecraft_directory = os.path.abspath(os.path.join(os.path.dirname(__file__), 'minecraft'))
 os.makedirs(minecraft_directory, exist_ok=True)
@@ -596,6 +600,7 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, "NetherWartFarm", "NetherWartFarm function is under development.")
 
 if __name__ == '__main__':
+    sync_mods()
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling, True)
 
     app = QApplication(argv)

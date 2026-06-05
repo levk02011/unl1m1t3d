@@ -4,3 +4,4 @@ logs/
 **/build/
 /__pycache__
 /mod_1_21_4/src/main/java/com/example/mod_1_21_4/ModConfig.java
+.idx/
